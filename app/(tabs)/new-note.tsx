@@ -1,15 +1,23 @@
-// app/new-note.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
-  Image, Modal, FlatList, Alert, Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import WebView from 'react-native-webview';
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import WebView from "react-native-webview";
+import { shadcn } from "../../constants/components-theme";
 
-const store = {};
+const store: Record<string, any> = {};
 
 const editorHtml = `
 <!DOCTYPE html>
@@ -116,22 +124,27 @@ const editorHtml = `
 
 export default function NewNoteScreen() {
   const router = useRouter();
-  const webviewRef = useRef(null);
-  const [title, setTitle] = useState('');
-  const [images, setImages] = useState([]);
-  const [category, setCategory] = useState('General');
-  const [linkedNotes, setLinkedNotes] = useState([]);
+  const webviewRef = useRef<WebView>(null);
+  const [title, setTitle] = useState("");
+  const [images, setImages] = useState<string[]>([]);
+  const [category, setCategory] = useState("General");
+  const [linkedNotes, setLinkedNotes] = useState<string[]>([]);
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showHeadingDropdown, setShowHeadingDropdown] = useState(false);
   const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false);
-  const [categories, setCategories] = useState(['General', 'Work', 'Personal', 'Ideas']);
-  const [newCategory, setNewCategory] = useState('');
-  const [allNotes, setAllNotes] = useState([]);
+  const [categories, setCategories] = useState([
+    "General",
+    "Work",
+    "Personal",
+    "Ideas",
+  ]);
+  const [newCategory, setNewCategory] = useState("");
+  const [allNotes, setAllNotes] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = store['notes'];
+    const saved = store["notes"];
     if (saved) setAllNotes(JSON.parse(saved));
   }, []);
 
@@ -147,19 +160,21 @@ export default function NewNoteScreen() {
       });
     }
     if (!result.canceled) {
-      const uris = result.assets ? result.assets.map(a => a.uri) : [result.uri];
-      setImages(prev => [...prev, ...uris]);
+      const uris = result.assets
+        ? result.assets.map((a) => a.uri)
+        : [result.uri];
+      setImages((prev) => [...prev, ...uris]);
     }
     setShowImageMenu(false);
   };
 
-  const removeImage = (index) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const saveNote = async () => {
     if (!title.trim()) {
-      Alert.alert('Title required', 'Please enter a note title.');
+      Alert.alert("Title required", "Please enter a note title.");
       return;
     }
     webviewRef.current?.injectJavaScript(`
@@ -170,7 +185,7 @@ export default function NewNoteScreen() {
     `);
   };
 
-  const onMessage = (event) => {
+  const onMessage = (event: any) => {
     const html = event.nativeEvent.data;
     const note = {
       id: Date.now().toString(),
@@ -181,36 +196,29 @@ export default function NewNoteScreen() {
       linkedNotes,
       createdAt: new Date().toISOString(),
     };
-    const existing = store['notes'] ? JSON.parse(store['notes']) : [];
+    const existing = store["notes"] ? JSON.parse(store["notes"]) : [];
     existing.push(note);
-    store['notes'] = JSON.stringify(existing);
+    store["notes"] = JSON.stringify(existing);
     router.back();
   };
 
-  const execCommand = (command, value = null) => {
+  const execCommand = (command: string, value: string | null = null) => {
     webviewRef.current?.injectJavaScript(`
-      document.execCommand('${command}', false, ${value ? `'${value}'` : 'null'});
+      document.execCommand('${command}', false, ${value ? `'${value}'` : "null"});
     `);
   };
 
-  // Apply inline style only to selected text, then turn off for future typing
-  const applyInlineStyle = (command) => {
+  const applyInlineStyle = (command: string) => {
     webviewRef.current?.injectJavaScript(`
       (function() {
         var sel = window.getSelection();
         if (sel.rangeCount === 0) return;
         var range = sel.getRangeAt(0);
-        if (range.collapsed) return;   // do nothing when nothing is selected
-
-        // Apply the formatting
+        if (range.collapsed) return;
         document.execCommand('${command}', false, null);
-
-        // Move cursor to the end of the previously selected text
         range.collapse(false);
         sel.removeAllRanges();
         sel.addRange(range);
-
-        // Toggle off the formatting for future typing
         document.execCommand('${command}', false, null);
       })();
     `);
@@ -224,13 +232,11 @@ export default function NewNoteScreen() {
           var range = sel.getRangeAt(0);
           var node = range.commonAncestorContainer;
           var blockquote = null;
-          
           if (node.nodeType === 3) {
             blockquote = node.parentElement ? node.parentElement.closest('blockquote') : null;
           } else {
             blockquote = node.closest ? node.closest('blockquote') : null;
           }
-          
           if (blockquote) {
             var fragment = document.createDocumentFragment();
             while (blockquote.firstChild) {
@@ -247,16 +253,16 @@ export default function NewNoteScreen() {
 
   const addCategory = () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      setCategories(prev => [...prev, newCategory.trim()]);
-      setNewCategory('');
+      setCategories((prev) => [...prev, newCategory.trim()]);
+      setNewCategory("");
     }
   };
 
-  const toggleLinkNote = (noteId) => {
+  const toggleLinkNote = (noteId: string) => {
     if (linkedNotes.includes(noteId)) {
-      setLinkedNotes(prev => prev.filter(id => id !== noteId));
+      setLinkedNotes((prev) => prev.filter((id) => id !== noteId));
     } else {
-      setLinkedNotes(prev => [...prev, noteId]);
+      setLinkedNotes((prev) => [...prev, noteId]);
     }
   };
 
@@ -264,7 +270,7 @@ export default function NewNoteScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.push("/settings")}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Note</Text>
@@ -277,14 +283,18 @@ export default function NewNoteScreen() {
       <TextInput
         style={styles.titleInput}
         placeholder="Note Title"
-        placeholderTextColor="#555"
+        placeholderTextColor={shadcn.colors.mutedForeground}
         value={title}
         onChangeText={setTitle}
         autoFocus
       />
 
       {/* Toolbar */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.toolbarScroll}
+      >
         <View style={styles.toolbar}>
           {/* Heading Dropdown */}
           <View style={styles.dropdownWrapper}>
@@ -296,21 +306,78 @@ export default function NewNoteScreen() {
               }}
             >
               <Text style={styles.toolButtonTextBold}>H</Text>
-              <Ionicons name="caret-down" size={10} color="#fff" style={{ marginLeft: 2 }} />
+              <Ionicons
+                name="caret-down"
+                size={10}
+                color={shadcn.colors.foreground}
+                style={{ marginLeft: 2 }}
+              />
             </TouchableOpacity>
             {showHeadingDropdown && (
               <View style={[styles.dropdown, { zIndex: 100, elevation: 10 }]}>
-                <TouchableOpacity style={styles.dropdownItem} onPress={() => { execCommand('formatBlock', '<h1>'); setShowHeadingDropdown(false); }}>
-                  <Text style={[styles.dropdownText, { fontSize: 22, fontWeight: 'bold' }]}>Heading 1</Text>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    execCommand("formatBlock", "<h1>");
+                    setShowHeadingDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      { fontSize: 22, fontWeight: "bold" },
+                    ]}
+                  >
+                    Heading 1
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.dropdownItem} onPress={() => { execCommand('formatBlock', '<h2>'); setShowHeadingDropdown(false); }}>
-                  <Text style={[styles.dropdownText, { fontSize: 19, fontWeight: 'bold' }]}>Heading 2</Text>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    execCommand("formatBlock", "<h2>");
+                    setShowHeadingDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      { fontSize: 19, fontWeight: "bold" },
+                    ]}
+                  >
+                    Heading 2
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.dropdownItem} onPress={() => { execCommand('formatBlock', '<h3>'); setShowHeadingDropdown(false); }}>
-                  <Text style={[styles.dropdownText, { fontSize: 17, fontWeight: '600' }]}>Heading 3</Text>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    execCommand("formatBlock", "<h3>");
+                    setShowHeadingDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      { fontSize: 17, fontWeight: "600" },
+                    ]}
+                  >
+                    Heading 3
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.dropdownItem} onPress={() => { execCommand('formatBlock', '<h4>'); setShowHeadingDropdown(false); }}>
-                  <Text style={[styles.dropdownText, { fontSize: 15, fontWeight: '600' }]}>Heading 4</Text>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    execCommand("formatBlock", "<h4>");
+                    setShowHeadingDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownText,
+                      { fontSize: 15, fontWeight: "600" },
+                    ]}
+                  >
+                    Heading 4
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -325,16 +392,26 @@ export default function NewNoteScreen() {
                 setShowHeadingDropdown(false);
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 14 }}>A</Text>
-              <Ionicons name="caret-down" size={10} color="#fff" style={{ marginLeft: 2 }} />
+              <Text style={{ color: shadcn.colors.foreground, fontSize: 14 }}>
+                A
+              </Text>
+              <Ionicons
+                name="caret-down"
+                size={10}
+                color={shadcn.colors.foreground}
+                style={{ marginLeft: 2 }}
+              />
             </TouchableOpacity>
             {showFontSizeDropdown && (
               <View style={[styles.dropdown, { zIndex: 100, elevation: 10 }]}>
-                {[1, 2, 3, 4, 5, 6, 7].map(size => (
+                {[1, 2, 3, 4, 5, 6, 7].map((size) => (
                   <TouchableOpacity
                     key={size}
                     style={styles.dropdownItem}
-                    onPress={() => { execCommand('fontSize', size); setShowFontSizeDropdown(false); }}
+                    onPress={() => {
+                      execCommand("fontSize", size.toString());
+                      setShowFontSizeDropdown(false);
+                    }}
                   >
                     <Text style={styles.dropdownText}>Size {size}</Text>
                   </TouchableOpacity>
@@ -343,43 +420,96 @@ export default function NewNoteScreen() {
             )}
           </View>
 
-          {/* Inline styles - only affect selected text */}
-          <TouchableOpacity style={styles.toolButton} onPress={() => applyInlineStyle('bold')}>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => applyInlineStyle("bold")}
+          >
             <Text style={styles.toolButtonTextBold}>B</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => applyInlineStyle('italic')}>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => applyInlineStyle("italic")}
+          >
             <Text style={styles.toolButtonTextItalic}>I</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => applyInlineStyle('underline')}>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => applyInlineStyle("underline")}
+          >
             <Text style={styles.toolButtonTextUnderline}>U</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => applyInlineStyle('strikeThrough')}>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => applyInlineStyle("strikeThrough")}
+          >
             <Text style={styles.toolButtonTextStrike}>S</Text>
           </TouchableOpacity>
 
-          {/* Block styles */}
-          <TouchableOpacity style={styles.toolButton} onPress={() => execCommand('insertUnorderedList')}>
-            <Ionicons name="list-outline" size={18} color="#fff" />
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => execCommand("insertUnorderedList")}
+          >
+            <Ionicons
+              name="list-outline"
+              size={18}
+              color={shadcn.colors.foreground}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => execCommand('insertOrderedList')}>
-            <Ionicons name="list-outline" size={18} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 10, marginLeft: 2 }}>1.</Text>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => execCommand("insertOrderedList")}
+          >
+            <Ionicons
+              name="list-outline"
+              size={18}
+              color={shadcn.colors.foreground}
+            />
+            <Text
+              style={{
+                color: shadcn.colors.foreground,
+                fontSize: 10,
+                marginLeft: 2,
+              }}
+            >
+              1.
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.toolButton} onPress={toggleQuote}>
-            <Text style={{ color: '#fff', fontSize: 18 }}>"</Text>
+            <Text style={{ color: shadcn.colors.foreground, fontSize: 18 }}>
+              "
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => execCommand('formatBlock', '<pre>')}>
-            <Text style={{ color: '#fff', fontSize: 14 }}>{'<>'}</Text>
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => execCommand("formatBlock", "<pre>")}
+          >
+            <Text style={{ color: shadcn.colors.foreground, fontSize: 14 }}>
+              {"<>"}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => {
-            Alert.prompt('Insert Link', 'Enter URL:', (url) => {
-              if (url) execCommand('createLink', url);
-            });
-          }}>
-            <Ionicons name="link-outline" size={18} color="#fff" />
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => {
+              Alert.prompt("Insert Link", "Enter URL:", (url) => {
+                if (url) execCommand("createLink", url);
+              });
+            }}
+          >
+            <Ionicons
+              name="link-outline"
+              size={18}
+              color={shadcn.colors.foreground}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.toolButton} onPress={() => setShowImageMenu(true)}>
-            <Ionicons name="image-outline" size={20} color="#fff" />
+          <TouchableOpacity
+            style={styles.toolButton}
+            onPress={() => setShowImageMenu(true)}
+          >
+            <Ionicons
+              name="image-outline"
+              size={20}
+              color={shadcn.colors.foreground}
+            />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -390,8 +520,15 @@ export default function NewNoteScreen() {
           {images.map((uri, index) => (
             <View key={index} style={styles.thumbnailContainer}>
               <Image source={{ uri }} style={styles.thumbnail} />
-              <TouchableOpacity style={styles.removeThumbnail} onPress={() => removeImage(index)}>
-                <Ionicons name="close-circle" size={20} color="#fff" />
+              <TouchableOpacity
+                style={styles.removeThumbnail}
+                onPress={() => removeImage(index)}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={20}
+                  color={shadcn.colors.foreground}
+                />
               </TouchableOpacity>
             </View>
           ))}
@@ -406,35 +543,75 @@ export default function NewNoteScreen() {
         onMessage={onMessage}
         scrollEnabled={true}
         javaScriptEnabled={true}
-        originWhitelist={['*']}
+        originWhitelist={["*"]}
       />
 
       {/* Bottom Bar */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.bottomChip} onPress={() => setShowCategoryModal(true)}>
-          <Ionicons name="folder-outline" size={20} color="#fff" />
+        <TouchableOpacity
+          style={styles.bottomChip}
+          onPress={() => setShowCategoryModal(true)}
+        >
+          <Ionicons
+            name="folder-outline"
+            size={20}
+            color={shadcn.colors.foreground}
+          />
           <Text style={styles.bottomChipText}>Category: {category}</Text>
-          <Ionicons name="chevron-forward" size={16} color="#888" />
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={shadcn.colors.mutedForeground}
+          />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.bottomChip} onPress={() => setShowLinkModal(true)}>
-          <Ionicons name="link-outline" size={20} color="#fff" />
+        <TouchableOpacity
+          style={styles.bottomChip}
+          onPress={() => setShowLinkModal(true)}
+        >
+          <Ionicons
+            name="link-outline"
+            size={20}
+            color={shadcn.colors.foreground}
+          />
           <Text style={styles.bottomChipText}>
-            Linked: {linkedNotes.length > 0 ? linkedNotes.length : 'None'}
+            Linked: {linkedNotes.length > 0 ? linkedNotes.length : "None"}
           </Text>
-          <Ionicons name="chevron-forward" size={16} color="#888" />
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={shadcn.colors.mutedForeground}
+          />
         </TouchableOpacity>
       </View>
 
       {/* Image Source Modal */}
       <Modal visible={showImageMenu} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowImageMenu(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowImageMenu(false)}
+        >
           <View style={styles.imageMenu}>
-            <TouchableOpacity style={styles.imageMenuItem} onPress={() => pickImage(false)}>
-              <Ionicons name="images-outline" size={24} color="#fff" />
+            <TouchableOpacity
+              style={styles.imageMenuItem}
+              onPress={() => pickImage(false)}
+            >
+              <Ionicons
+                name="images-outline"
+                size={24}
+                color={shadcn.colors.foreground}
+              />
               <Text style={styles.imageMenuText}>Gallery</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.imageMenuItem} onPress={() => pickImage(true)}>
-              <Ionicons name="camera-outline" size={24} color="#fff" />
+            <TouchableOpacity
+              style={styles.imageMenuItem}
+              onPress={() => pickImage(true)}
+            >
+              <Ionicons
+                name="camera-outline"
+                size={24}
+                color={shadcn.colors.foreground}
+              />
               <Text style={styles.imageMenuText}>Camera</Text>
             </TouchableOpacity>
           </View>
@@ -451,11 +628,30 @@ export default function NewNoteScreen() {
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.categoryItem, category === item && styles.categoryItemSelected]}
-                  onPress={() => { setCategory(item); setShowCategoryModal(false); }}
+                  style={[
+                    styles.categoryItem,
+                    category === item && styles.categoryItemSelected,
+                  ]}
+                  onPress={() => {
+                    setCategory(item);
+                    setShowCategoryModal(false);
+                  }}
                 >
-                  <Text style={[styles.categoryText, category === item && styles.categoryTextSelected]}>{item}</Text>
-                  {category === item && <Ionicons name="checkmark" size={20} color="#4ECDC4" />}
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      category === item && styles.categoryTextSelected,
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  {category === item && (
+                    <Ionicons
+                      name="checkmark"
+                      size={20}
+                      color={shadcn.colors.brand}
+                    />
+                  )}
                 </TouchableOpacity>
               )}
             />
@@ -463,15 +659,25 @@ export default function NewNoteScreen() {
               <TextInput
                 style={styles.addCategoryInput}
                 placeholder="New category..."
-                placeholderTextColor="#555"
+                placeholderTextColor={shadcn.colors.mutedForeground}
                 value={newCategory}
                 onChangeText={setNewCategory}
               />
-              <TouchableOpacity style={styles.addCategoryButton} onPress={addCategory}>
-                <Ionicons name="add" size={20} color="#fff" />
+              <TouchableOpacity
+                style={styles.addCategoryButton}
+                onPress={addCategory}
+              >
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={shadcn.colors.foreground}
+                />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.modalClose} onPress={() => setShowCategoryModal(false)}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowCategoryModal(false)}
+            >
               <Text style={styles.modalCloseText}>Done</Text>
             </TouchableOpacity>
           </View>
@@ -487,18 +693,32 @@ export default function NewNoteScreen() {
               <Text style={styles.emptyText}>No other notes available</Text>
             ) : (
               <FlatList
-                data={allNotes.filter(n => n.id !== undefined)}
+                data={allNotes.filter((n) => n.id !== undefined)}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.linkItem} onPress={() => toggleLinkNote(item.id)}>
+                  <TouchableOpacity
+                    style={styles.linkItem}
+                    onPress={() => toggleLinkNote(item.id)}
+                  >
                     <Text style={styles.linkTitle}>{item.title}</Text>
-                    <Text style={styles.linkDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-                    {linkedNotes.includes(item.id) && <Ionicons name="checkmark-circle" size={20} color="#4ECDC4" />}
+                    <Text style={styles.linkDate}>
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </Text>
+                    {linkedNotes.includes(item.id) && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={shadcn.colors.brand}
+                      />
+                    )}
                   </TouchableOpacity>
                 )}
               />
             )}
-            <TouchableOpacity style={styles.modalClose} onPress={() => setShowLinkModal(false)}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowLinkModal(false)}
+            >
               <Text style={styles.modalCloseText}>Done</Text>
             </TouchableOpacity>
           </View>
@@ -509,120 +729,210 @@ export default function NewNoteScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: shadcn.colors.background },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingHorizontal: 16, paddingBottom: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
   },
-  cancelText: { color: '#fff', fontSize: 16 },
-  headerTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  saveText: { color: '#4ECDC4', fontSize: 16, fontWeight: '600' },
+  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
+  headerTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  saveText: { color: shadcn.colors.brand, fontSize: 16, fontWeight: "600" },
   titleInput: {
-    color: '#fff', fontSize: 22, fontWeight: '600',
-    backgroundColor: '#1a1a1a', paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 12, marginHorizontal: 16, marginBottom: 10,
+    color: shadcn.colors.foreground,
+    fontSize: 22,
+    fontWeight: "600",
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: shadcn.radius.md,
+    marginHorizontal: 16,
+    marginBottom: 10,
   },
   toolbarScroll: { marginBottom: 10, maxHeight: 36, paddingHorizontal: 16 },
-  toolbar: {
-    flexDirection: 'row', gap: 6, alignItems: 'center', height: 36,
-  },
+  toolbar: { flexDirection: "row", gap: 6, alignItems: "center", height: 36 },
   toolButton: {
-    backgroundColor: '#1a1a1a', paddingHorizontal: 12, paddingVertical: 0,
-    height: 36, borderRadius: 8, justifyContent: 'center', alignItems: 'center',
-    flexDirection: 'row',
+    backgroundColor: shadcn.colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    height: 36,
+    borderRadius: shadcn.radius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
   },
-  toolButtonTextBold: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  toolButtonTextItalic: { color: '#fff', fontSize: 16, fontStyle: 'italic' },
-  toolButtonTextUnderline: { color: '#fff', fontSize: 16, textDecorationLine: 'underline' },
-  toolButtonTextStrike: { color: '#fff', fontSize: 16, textDecorationLine: 'line-through' },
-  dropdownWrapper: { position: 'relative' },
+  toolButtonTextBold: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  toolButtonTextItalic: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontStyle: "italic",
+  },
+  toolButtonTextUnderline: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    textDecorationLine: "underline",
+  },
+  toolButtonTextStrike: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    textDecorationLine: "line-through",
+  },
+  dropdownWrapper: { position: "relative" },
   dropdown: {
-    position: 'absolute', top: 40, left: 0,
-    backgroundColor: '#222', borderRadius: 10, padding: 4,
+    position: "absolute",
+    top: 40,
+    left: 0,
+    backgroundColor: shadcn.colors.secondary,
+    borderRadius: shadcn.radius.md,
+    padding: 4,
     minWidth: 130,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5, shadowRadius: 8, elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 10,
   },
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 14 },
-  dropdownText: { color: '#fff', fontSize: 15 },
+  dropdownText: { color: shadcn.colors.foreground, fontSize: 15 },
   imageGallery: {
-    flexShrink: 0, maxHeight: 90,
-    paddingHorizontal: 16, marginBottom: 8,
+    flexShrink: 0,
+    maxHeight: 90,
+    paddingHorizontal: 16,
+    marginBottom: 8,
   },
-  thumbnailContainer: { marginRight: 10, position: 'relative' },
-  thumbnail: { width: 80, height: 80, borderRadius: 8 },
+  thumbnailContainer: { marginRight: 10, position: "relative" },
+  thumbnail: { width: 80, height: 80, borderRadius: shadcn.radius.sm },
   removeThumbnail: {
-    position: 'absolute', top: -6, right: -6,
-    backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 12,
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 12,
   },
   editor: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    backgroundColor: shadcn.colors.card,
+    borderRadius: shadcn.radius.md,
     marginHorizontal: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: shadcn.colors.border,
   },
   bottomBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 10,
   },
   bottomChip: {
     flex: 1,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    paddingVertical: 14, paddingHorizontal: 14,
-    borderRadius: 12, gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: shadcn.radius.md,
+    gap: 10,
   },
-  bottomChipText: { color: '#fff', fontSize: 16, flex: 1 },
-  // Modals
+  bottomChipText: { color: shadcn.colors.foreground, fontSize: 16, flex: 1 },
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   imageMenu: {
-    backgroundColor: '#1a1a1a', borderRadius: 16,
-    padding: 20, flexDirection: 'row', gap: 30,
+    backgroundColor: shadcn.colors.card,
+    borderRadius: shadcn.radius.lg,
+    padding: 20,
+    flexDirection: "row",
+    gap: 30,
   },
-  imageMenuItem: { alignItems: 'center', gap: 8 },
-  imageMenuText: { color: '#fff', fontSize: 14 },
+  imageMenuItem: { alignItems: "center", gap: 8 },
+  imageMenuText: { color: shadcn.colors.foreground, fontSize: 14 },
   modalContainer: {
-    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)',
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.7)",
   },
   modalContent: {
-    backgroundColor: '#111', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, maxHeight: '80%',
+    backgroundColor: shadcn.colors.card,
+    borderTopLeftRadius: shadcn.radius.xl,
+    borderTopRightRadius: shadcn.radius.xl,
+    padding: 20,
+    maxHeight: "80%",
   },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 16 },
+  modalTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
   categoryItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#222',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: shadcn.colors.border,
   },
-  categoryItemSelected: { backgroundColor: '#1a1a1a' },
-  categoryText: { color: '#888', fontSize: 16 },
-  categoryTextSelected: { color: '#fff', fontWeight: '600' },
+  categoryItemSelected: { backgroundColor: shadcn.colors.secondary },
+  categoryText: { color: shadcn.colors.mutedForeground, fontSize: 16 },
+  categoryTextSelected: { color: shadcn.colors.foreground, fontWeight: "600" },
   addCategoryRow: {
-    flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    gap: 8,
   },
   addCategoryInput: {
-    flex: 1, color: '#fff', fontSize: 16,
-    backgroundColor: '#1a1a1a', paddingVertical: 10, paddingHorizontal: 14,
-    borderRadius: 10,
+    flex: 1,
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    backgroundColor: shadcn.colors.secondary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: shadcn.radius.md,
   },
   addCategoryButton: {
-    backgroundColor: '#1a1a1a', width: 40, height: 40, borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: shadcn.colors.secondary,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  modalClose: { marginTop: 16, alignItems: 'center', paddingVertical: 12 },
-  modalCloseText: { color: '#4ECDC4', fontSize: 16, fontWeight: '600' },
+  modalClose: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
+  modalCloseText: {
+    color: shadcn.colors.brand,
+    fontSize: 16,
+    fontWeight: "600",
+  },
   linkItem: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#222', gap: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: shadcn.colors.border,
+    gap: 10,
   },
-  linkTitle: { color: '#fff', fontSize: 16, flex: 1 },
-  linkDate: { color: '#888', fontSize: 12 },
-  emptyText: { color: '#888', fontSize: 15, textAlign: 'center', marginVertical: 20 },
+  linkTitle: { color: shadcn.colors.foreground, fontSize: 16, flex: 1 },
+  linkDate: { color: shadcn.colors.mutedForeground, fontSize: 12 },
+  emptyText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 15,
+    textAlign: "center",
+    marginVertical: 20,
+  },
 });

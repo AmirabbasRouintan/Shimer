@@ -1,22 +1,26 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { shadcn } from "../../constants/components-theme";
 
 const hours = Array.from({ length: 24 }, (_, i) => i);
 
 export default function DayStartScreen() {
   const router = useRouter();
   const [selectedHour, setSelectedHour] = useState(0);
-
-  const formatHour = (h) => {
-    return h.toString().padStart(2, '0') + ':00';
-  };
+  const formatHour = (h: number) => h.toString().padStart(2, "0") + ":00";
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.push("/settings")}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Day Start</Text>
@@ -24,44 +28,66 @@ export default function DayStartScreen() {
           <Text style={styles.doneText}>Done</Text>
         </TouchableOpacity>
       </View>
-
       <ScrollView style={styles.content}>
-        {hours.map((hour) => (
+        {hours.map(hour =>
           <TouchableOpacity
             key={hour}
             style={styles.hourRow}
             onPress={() => setSelectedHour(hour)}
           >
-            <Text style={[
-              styles.hourText,
-              selectedHour === hour && styles.hourTextSelected
-            ]}>
+            <Text
+              style={[
+                styles.hourText,
+                selectedHour === hour && styles.hourTextSelected,
+              ]}
+            >
               {formatHour(hour)}
             </Text>
-            {selectedHour === hour && (
-              <Ionicons name="checkmark" size={22} color="#4ECDC4" />
-            )}
-          </TouchableOpacity>
-        ))}
+            {selectedHour === hour &&
+              <Ionicons
+                name="checkmark"
+                size={22}
+                color={shadcn.colors.brand}
+              />}
+          </TouchableOpacity>,
+        )}
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: shadcn.colors.background },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: shadcn.colors.border,
   },
-  cancelText: { color: '#fff', fontSize: 16 },
-  headerTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  doneText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
+  headerTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  doneText: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontWeight: "600",
+  },
   content: { flex: 1, paddingHorizontal: 16 },
   hourRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#1a1a1a',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: shadcn.colors.border,
   },
-  hourText: { color: '#888', fontSize: 18 },
-  hourTextSelected: { color: '#fff', fontWeight: '600' },
+  hourText: { color: shadcn.colors.mutedForeground, fontSize: 18 },
+  hourTextSelected: { color: shadcn.colors.foreground, fontWeight: "600" },
 });

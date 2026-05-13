@@ -1,49 +1,39 @@
-// app/edit_things.tsx
-import React, { useState } from 'react';
+// app/(tabs)/edit_things.tsx
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  Alert,
   FlatList,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-
-interface Activity {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  keepScreenOn: boolean;
-  pomodoro: number;
-  goals: string;
-  timerHints: string;
-  checklists: string[];
-  shortcuts: string[];
-}
-
-const defaultActivities: Activity[] = [
-  { id: '1', name: 'University', icon: 'school-outline', color: '#DDA0DD', keepScreenOn: false, pomodoro: 25, goals: 'Study 4 hours', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '2', name: 'Book', icon: 'book-outline', color: '#98D8C8', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '3', name: 'Movies', icon: 'film-outline', color: '#45B7D1', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '4', name: 'Meditation', icon: 'leaf-outline', color: '#96CEB4', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '5', name: 'Work', icon: 'briefcase-outline', color: '#96CEB4', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '6', name: 'Hobby', icon: 'heart-outline', color: '#4ECDC4', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '7', name: 'Personal development', icon: 'star-outline', color: '#FFEAA7', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '8', name: 'Exercises/Health', icon: 'fitness-outline', color: '#FF6B6B', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '9', name: 'Walk', icon: 'walk-outline', color: '#F7B731', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '10', name: 'Getting ready', icon: 'bed-outline', color: '#FF9F4A', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '11', name: 'Sleep/Rest', icon: 'bed-outline', color: '#E8635E', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-  { id: '12', name: 'Other', icon: 'folder-outline', color: '#6C5CE7', keepScreenOn: false, pomodoro: 25, goals: '', timerHints: '', checklists: [], shortcuts: [] },
-];
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { shadcn } from "../../constants/components-theme";
+import { getActivities, setActivities, subscribe, Activity } from "../activitiesStore";
 
 export default function EditThingsScreen() {
   const router = useRouter();
-  const [activities, setActivities] = useState<Activity[]>(defaultActivities);
+  const [activities, setActivitiesState] = useState<Activity[]>([]);
+
+  useEffect(() => {
+    setActivitiesState(getActivities());
+    const unsubscribe = subscribe(() => {
+      setActivitiesState(getActivities());
+    });
+    return unsubscribe;
+  }, []);
+
+  const saveActivities = (newActivities: Activity[]) => {
+    setActivities(newActivities);
+  };
 
   const moveUp = (index: number) => {
     if (index > 0) {
       const newActivities = [...activities];
       [newActivities[index - 1], newActivities[index]] = [newActivities[index], newActivities[index - 1]];
-      setActivities(newActivities);
+      saveActivities(newActivities);
     }
   };
 
@@ -51,164 +41,171 @@ export default function EditThingsScreen() {
     if (index < activities.length - 1) {
       const newActivities = [...activities];
       [newActivities[index], newActivities[index + 1]] = [newActivities[index + 1], newActivities[index]];
-      setActivities(newActivities);
+      saveActivities(newActivities);
     }
   };
 
-  const renderActivityItem = ({ item, index }: { item: Activity; index: number }) => (
-    <TouchableOpacity
-      style={styles.activityRow}
-      onPress={() => router.push({
-        pathname: '/edit-activity-page',
-        params: {
-          id: item.id,
-          name: item.name,
-          icon: item.icon,
-          color: item.color,
-          keepScreenOn: String(item.keepScreenOn),
-          pomodoro: String(item.pomodoro),
-          goals: item.goals,
-          timerHints: item.timerHints,
+  const handleDelete = (item: Activity, index: number) => {
+    if (item.name === "Other" || item.id === "12") {
+      Alert.alert("Cannot Delete", "The 'Other' activity cannot be removed.");
+      return;
+    }
+    Alert.alert(
+      "Delete Activity",
+      `Are you sure you want to delete "${item.name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            const newActivities = activities.filter((_, i) => i !== index);
+            saveActivities(newActivities);
+          }
         }
-      })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.dragHandle}>
-        <Ionicons name="menu-outline" size={18} color="#666" />
-      </View>
-      <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-      <Ionicons name={item.icon} size={20} color="#888" style={styles.activityIcon} />
-      <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
-      <View style={styles.rowActions}>
-        <TouchableOpacity
-          onPress={() => moveUp(index)}
-          style={styles.actionButton}
-          disabled={index === 0}
-        >
-          <Ionicons name="arrow-up" size={18} color={index === 0 ? '#333' : '#888'} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => moveDown(index)}
-          style={styles.actionButton}
-          disabled={index === activities.length - 1}
-        >
-          <Ionicons name="arrow-down" size={18} color={index === activities.length - 1 ? '#333' : '#888'} />
-        </TouchableOpacity>
-        <Ionicons name="create-outline" size={18} color="#888" />
-      </View>
-    </TouchableOpacity>
+      ]
+    );
+  };
+
+  const renderActivityItem = ({ item, index }: { item: Activity; index: number }) => (
+    <View style={styles.activityRowWrapper}>
+      <TouchableOpacity
+        style={styles.activityRow}
+        onPress={() =>
+          router.push({
+            pathname: "/edit-activity-page",
+            params: {
+              id: item.id,
+              name: item.name,
+              icon: item.icon,
+              color: item.color,
+              keepScreenOn: String(item.keepScreenOn),
+              pomodoro: String(item.pomodoro),
+              goals: item.goals,
+              timerHints: item.timerHints
+            }
+          })
+        }
+        activeOpacity={0.7}
+      >
+        <View style={styles.dragHandle}>
+          <Ionicons name="menu-outline" size={16} color={shadcn.colors.mutedForeground} />
+        </View>
+        <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+        <Ionicons name={item.icon as any} size={18} color={shadcn.colors.mutedForeground} style={styles.activityIcon} />
+        <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
+        <View style={styles.rowActions}>
+          <TouchableOpacity onPress={() => moveUp(index)} style={styles.actionButton} disabled={index === 0}>
+            <Ionicons name="arrow-up" size={16} color={index === 0 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => moveDown(index)} style={styles.actionButton} disabled={index === activities.length - 1}>
+            <Ionicons name="arrow-down" size={16} color={index === activities.length - 1 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDelete(item, index)} style={styles.actionButton}>
+            <Ionicons name="trash-outline" size={16} color={shadcn.colors.destructive} />
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity onPress={() => router.replace('/things')} style={styles.headerLeft}>
+          <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Activities</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.doneButton}>Done</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Edit Activities</Text>
+        </View>
+        <TouchableOpacity onPress={() => router.replace('/things')} style={styles.headerRight}>
+          <View style={styles.doneButtonContainer}>
+            <Text style={styles.doneButton}>Done</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={activities}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={renderActivityItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => router.push('/add-activity-page')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add-circle" size={22} color="#fff" />
-        <Text style={styles.addButtonText}>Add New Activity</Text>
+      <TouchableOpacity style={styles.addButton} onPress={() => router.push("/add-activity-page")} activeOpacity={0.8}>
+        <Ionicons name="add-circle-outline" size={22} color="#888" />
+        <Text style={styles.addButtonText}>New Activity</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  container: { flex: 1, backgroundColor: shadcn.colors.background },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 12
+  },
+  headerLeft: {
+    width: 60,
+    alignItems: 'flex-start',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerRight: {
+    width: 60,
+    alignItems: 'flex-end',
   },
   headerTitle: {
-    color: '#fff',
+    color: shadcn.colors.foreground,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600"
   },
-  doneButton: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 80,
-    paddingTop: 8,
-  },
+  listContent: { paddingHorizontal: 16, paddingBottom: 80, paddingTop: 8, marginTop: 20 },
+  activityRowWrapper: { marginBottom: 6 },
   activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0a0a0a',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    marginBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: shadcn.colors.card,
+    borderRadius: shadcn.radius.lg,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  dragHandle: {
-    marginRight: 10,
-  },
-  colorIndicator: {
-    width: 4,
-    height: 32,
-    borderRadius: 2,
-    marginRight: 12,
-  },
-  activityIcon: {
-    marginRight: 12,
-  },
-  activityName: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 15,
-  },
-  rowActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 2,
-  },
+  dragHandle: { marginRight: 15, marginLeft: 5 },
+  colorIndicator: { width: 10, height: 25, borderRadius: 10, marginRight: 20 },
+  activityIcon: { marginRight: 8 },
+  activityName: { flex: 1, color: shadcn.colors.foreground, fontSize: 15 },
+  rowActions: { flexDirection: "row", gap: 6 },
+  actionButton: { padding: 2 },
   addButton: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 20,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
     gap: 8,
-    backgroundColor: '#1a1a1a',
-    paddingVertical: 14,
-    borderRadius: 10,
-    marginHorizontal: 16,
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '500'
+  },
+  doneButtonContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  doneButton: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '600'
   },
 });

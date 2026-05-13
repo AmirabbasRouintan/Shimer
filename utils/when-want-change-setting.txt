@@ -1,0 +1,13 @@
+Dynamic values for "Day Start" and "Home Screen" (reads from store)
+
+Section icons for better visual grouping
+
+Improved modal – tap backdrop to close, close button
+
+Haptic feedback – adds subtle vibration on row taps (optional, but enhances UX)
+
+Better empty state for checklists (not needed, but added a friendly message if none exist)
+
+Uses useFocusEffect to refresh checklists when returning from edit/new
+
+Consistent shadcn styling throughout

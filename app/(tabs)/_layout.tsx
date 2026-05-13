@@ -1,5 +1,5 @@
-// app/(tabs)/_layout.js
-import { Tabs, useRouter } from 'expo-router';
+// app/(tabs)/_layout.tsx
+import { Tabs, useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -57,43 +57,60 @@ function CustomTabBar({ state, descriptors, navigation }) {
   const colorScheme = useColorScheme();
   const activeColor = Colors[colorScheme ?? 'light'].tint;
   const router = useRouter();
+  const pathname = usePathname();
+
+  // Hide tab bar on specific pages
+  const hiddenRoutes = ['/history', '/summary'];
+  if (hiddenRoutes.includes(pathname)) {
+    return null;
+  }
+
+  const isThingsActive = pathname === '/things';
+  const isSettingsActive = pathname === '/settings';
 
   const handleClockPress = () => {
-    if (state.index === 0) {
+    if (pathname === '/' || pathname === '/index') {
       router.push('/main');
     } else {
-      navigation.navigate('index');
+      router.push('/');
     }
   };
-
-  const isHomeActive = state.index === 0;
-  const isSettingsActive = state.index === 1;
 
   return (
     <View style={styles.tabBar}>
       {/* Things Tab */}
       <TouchableOpacity
         onPress={() => navigation.navigate('things')}
-        style={styles.tabItem}>
+        style={styles.tabItem}
+        activeOpacity={0.7}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
         <Ionicons
           name="layers-outline"
-          size={26}
-          color={isHomeActive ? activeColor : '#666'}
+          size={isThingsActive ? 32 : 26}
+          color={isThingsActive ? activeColor : '#666'}
         />
       </TouchableOpacity>
 
       {/* Live Clock in the middle */}
-      <TouchableOpacity onPress={handleClockPress}>
+      <TouchableOpacity
+        onPress={handleClockPress}
+        style={styles.clockButton}
+        activeOpacity={0.7}
+      >
         <LiveClock />
       </TouchableOpacity>
 
       {/* Settings Tab */}
       <TouchableOpacity
         onPress={() => navigation.navigate('settings')}
-        style={styles.tabItem}>
+        style={styles.tabItem}
+        activeOpacity={0.7}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
         <Ionicons
           name="grid-outline"
-          size={26}
+          size={isSettingsActive ? 32 : 26}
           color={isSettingsActive ? activeColor : '#666'}
         />
       </TouchableOpacity>
@@ -118,10 +135,9 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#111',
-    height: 70,
     paddingBottom: 10,
-    paddingTop: 10,
-    paddingHorizontal: 20,
+    height: 80,
+    paddingHorizontal: 30,
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 0,
@@ -131,30 +147,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  clockButton: {
+    paddingVertical: 4,      // was 12
+    paddingHorizontal: 10,   // was 20
+    marginVertical: 0,       // was -12
+    marginHorizontal: 0,     // was -10
+  },
   clockContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,   // was 20
+    paddingVertical: 4,      // was 8
+    borderRadius: 16,        // was 20
   },
   clockText: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 20,            // was 22
     fontWeight: 'bold',
     textAlign: 'center',
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    gap: 3,                  // was 4
+    marginTop: 1,            // was 2
   },
   dateText: {
     color: '#888',
-    fontSize: 11,
+    fontSize: 10,            // was 11
     textAlign: 'center',
   },
   batteryText: {
     color: '#888',
-    fontSize: 11,
+    fontSize: 10,            // was 11
   },
 });

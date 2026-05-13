@@ -191,6 +191,9 @@ export default function MainScreen() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Animated progress bar width
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   // Animate pulsing dot
   useEffect(() => {
     const pulseSequence = Animated.loop(
@@ -361,11 +364,24 @@ export default function MainScreen() {
   };
 
   const clearPlan = () => {
-    setDailyPlan(null);
-    setScheduleItems([]);
-    setChecklistItems([]);
-    store['daily_plan'] = null;
-    setCurrentBlockIndex(null);
+    Alert.alert(
+      'Delete Plan',
+      'Are you sure you want to delete your daily plan? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setDailyPlan(null);
+            setScheduleItems([]);
+            setChecklistItems([]);
+            store['daily_plan'] = null;
+            setCurrentBlockIndex(null);
+          }
+        }
+      ]
+    );
   };
 
   const copyExampleJSON = () => {
@@ -424,14 +440,29 @@ export default function MainScreen() {
     };
   };
 
+  // Animate progress bar when percentage changes
+  const stats = getCompletionStats();
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: stats.percentage,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
+  }, [stats.percentage]);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
+
   // Render Donut Chart Summary Modal
   const renderSummaryModal = () => {
-    const stats = getCompletionStats();
+    const statsLocal = getCompletionStats();
     const size = 200;
     const strokeWidth = 20;
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
-    const progressOffset = circumference - (stats.percentage / 100) * circumference;
+    const progressOffset = circumference - (statsLocal.percentage / 100) * circumference;
 
     return (
       <Modal
@@ -485,7 +516,7 @@ export default function MainScreen() {
                       fontSize={32}
                       fontWeight="bold"
                     >
-                      {Math.round(stats.percentage)}%
+                      {Math.round(statsLocal.percentage)}%
                     </SvgText>
                     <SvgText
                       x={size / 2}
@@ -504,23 +535,23 @@ export default function MainScreen() {
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
                   <Ionicons name="checkbox-outline" size={24} color="#4ECDC4" />
-                  <Text style={styles.statNumber}>{stats.completed}/{stats.total}</Text>
+                  <Text style={styles.statNumber}>{statsLocal.completed}/{statsLocal.total}</Text>
                   <Text style={styles.statLabel}>Total Tasks</Text>
                 </View>
                 <View style={styles.statCard}>
                   <Ionicons name="time-outline" size={24} color="#FF9F4A" />
-                  <Text style={styles.statNumber}>{stats.scheduleCompleted}/{stats.scheduleTotal}</Text>
+                  <Text style={styles.statNumber}>{statsLocal.scheduleCompleted}/{statsLocal.scheduleTotal}</Text>
                   <Text style={styles.statLabel}>Schedule Done</Text>
                 </View>
                 <View style={styles.statCard}>
                   <Ionicons name="list-outline" size={24} color="#DDA0DD" />
-                  <Text style={styles.statNumber}>{stats.checklistCompleted}/{stats.checklistTotal}</Text>
+                  <Text style={styles.statNumber}>{statsLocal.checklistCompleted}/{statsLocal.checklistTotal}</Text>
                   <Text style={styles.statLabel}>Checklist Done</Text>
                 </View>
               </View>
 
               {/* Achievement Message */}
-              {stats.percentage === 100 && (
+              {statsLocal.percentage === 100 && (
                 <View style={styles.achievementBox}>
                   <Ionicons name="trophy" size={32} color="#FFD700" />
                   <Text style={styles.achievementText}>Perfect Day! 🎉</Text>
@@ -528,7 +559,7 @@ export default function MainScreen() {
                 </View>
               )}
 
-              {stats.percentage >= 70 && stats.percentage < 100 && (
+              {statsLocal.percentage >= 70 && statsLocal.percentage < 100 && (
                 <View style={styles.greatBox}>
                   <Ionicons name="star" size={28} color="#FFEAA7" />
                   <Text style={styles.greatText}>Great Progress! 🌟</Text>
@@ -536,7 +567,7 @@ export default function MainScreen() {
                 </View>
               )}
 
-              {stats.percentage < 30 && stats.total > 0 && (
+              {statsLocal.percentage < 30 && statsLocal.total > 0 && (
                 <View style={styles.encourageBox}>
                   <Ionicons name="rocket" size={28} color="#4ECDC4" />
                   <Text style={styles.encourageText}>You've got this! 💪</Text>
@@ -689,7 +720,7 @@ export default function MainScreen() {
 
     const now = new Date();
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const stats = getCompletionStats();
+    const currentStats = getCompletionStats();
 
     return (
       <View style={styles.planContainer}>
@@ -710,12 +741,12 @@ export default function MainScreen() {
           </View>
         </View>
 
-        {/* Progress Bar */}
+        {/* Animated Progress Bar */}
         <View style={styles.progressBarContainer}>
           <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${stats.percentage}%` }]} />
+            <Animated.View style={[styles.progressBarFill, { width: progressWidth }]} />
           </View>
-          <Text style={styles.progressText}>{Math.round(stats.percentage)}% Complete</Text>
+          <Text style={styles.progressText}>{Math.round(currentStats.percentage)}% Complete</Text>
         </View>
 
         <View style={styles.planHeader}>
@@ -723,9 +754,7 @@ export default function MainScreen() {
             <Text style={styles.planDate}>{dailyPlan.date || 'Today'}</Text>
             <Text style={styles.planName}>{dailyPlan.name || 'Your Day'}</Text>
           </View>
-          <TouchableOpacity onPress={clearPlan} style={styles.clearPlanButton}>
-            <Ionicons name="close-circle" size={24} color="#666" />
-          </TouchableOpacity>
+          {/* Delete button removed from here */}
         </View>
 
         {dailyPlan.motto && (
@@ -882,6 +911,14 @@ export default function MainScreen() {
             ))}
           </>
         )}
+
+        {/* Delete Plan Button at the bottom */}
+        <TouchableOpacity style={styles.deletePlanButton} onPress={clearPlan}>
+          <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+          <Text style={styles.deletePlanText}>Delete Plan</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </View>
     );
   };
@@ -1584,9 +1621,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 4,
   },
-  clearPlanButton: {
-    padding: 4,
-  },
   mottoBox: {
     flexDirection: 'row',
     backgroundColor: '#0a0a0a',
@@ -1848,5 +1882,23 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 13,
     lineHeight: 18,
+  },
+  // Delete Plan Button (bottom)
+  deletePlanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,107,107,0.15)',
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.3)',
+  },
+  deletePlanText: {
+    color: '#FF6B6B',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

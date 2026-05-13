@@ -1,10 +1,9 @@
-// app/(tabs)/settings.tsx
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Modal,
@@ -13,14 +12,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  Vibration,
+  View
 } from "react-native";
-
-interface Checklist {
-  title: string;
-  icon: string;
-  items: any[];
-}
+import { shadcn } from "../../constants/components-theme";
+import { getChecklists, subscribe, Checklist } from "../activitiesStore";
 
 interface AppData {
   checklists?: Checklist[];
@@ -35,9 +31,19 @@ interface AppData {
   last_backup?: string;
   version?: string;
   timestamp?: string;
+  home_screen_settings?: {
+    showClock: boolean;
+    showTasks: boolean;
+    showSummary: boolean;
+    showHistory: boolean;
+  };
 }
 
 const store: Record<string, any> = {};
+
+const lightHaptic = () => {
+  if (Platform.OS !== "web") Vibration.vibrate(10);
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -47,17 +53,42 @@ export default function SettingsScreen() {
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupFrequency, setBackupFrequency] = useState("manual");
   const [lastBackup, setLastBackup] = useState("Never");
+  const [dayStart, setDayStart] = useState("00:00");
+  const [homeScreenSummary, setHomeScreenSummary] = useState("Clock, Tasks");
 
+  // Subscribe to checklist changes
   useEffect(() => {
-    const stored = store["checklists"];
-    if (stored) {
-      setChecklists(JSON.parse(stored));
-    } else {
-      setChecklists([
-        { title: "University", icon: "school-outline", items: [] },
-      ]);
-    }
+    const update = () => setChecklists(getChecklists());
+    update();
+    const unsubscribe = subscribe(update);
+    return unsubscribe;
   }, []);
+
+  // Load other settings from `store`
+  useFocusEffect(
+    useCallback(() => {
+      const savedDayStart = store["day_start"];
+      if (savedDayStart) setDayStart(savedDayStart);
+      else setDayStart("00:00");
+
+      const homeSettings = store["home_screen_settings"];
+      if (homeSettings) {
+        const visible = [];
+        if (homeSettings.showClock) visible.push("Clock");
+        if (homeSettings.showTasks) visible.push("Tasks");
+        if (homeSettings.showSummary) visible.push("Summary");
+        if (homeSettings.showHistory) visible.push("History");
+        setHomeScreenSummary(visible.length ? visible.join(", ") : "Nothing shown");
+      } else {
+        setHomeScreenSummary("Clock, Tasks");
+      }
+
+      const savedFreq = store["backup_frequency"];
+      if (savedFreq) setBackupFrequency(savedFreq);
+      const savedLast = store["last_backup"];
+      if (savedLast) setLastBackup(savedLast);
+    }, [])
+  );
 
   useEffect(() => {
     if (params.newChecklist) {
@@ -65,12 +96,13 @@ export default function SettingsScreen() {
         ? params.newChecklist[0]
         : params.newChecklist;
       try {
-        const newList: Checklist = JSON.parse(newChecklistParam);
+        const newList = JSON.parse(newChecklistParam);
         if (newList.title) {
-          setChecklists((prev) => {
-            const updated = [...prev, newList];
-            store["checklists"] = JSON.stringify(updated);
-            return updated;
+          const { addChecklist } = require("../activitiesStore");
+          addChecklist({
+            title: newList.title,
+            icon: newList.icon,
+            items: []
           });
         }
       } catch (e) {
@@ -79,30 +111,25 @@ export default function SettingsScreen() {
     }
   }, [params.newChecklist]);
 
-  useEffect(() => {
-    const saved = store["backup_frequency"];
-    if (saved) setBackupFrequency(saved);
-    const savedLast = store["last_backup"];
-    if (savedLast) setLastBackup(savedLast);
-  }, []);
-
   const collectAllData = (): AppData => {
     return {
       version: "2026.1.0",
       timestamp: new Date().toISOString(),
-      checklists: store["checklists"] ? JSON.parse(store["checklists"]) : [],
+      checklists: getChecklists(),
       tasks_today: store["tasks_today"] ? JSON.parse(store["tasks_today"]) : [],
-      tasks_tomorrow: store["tasks_tomorrow"]
-        ? JSON.parse(store["tasks_tomorrow"])
-        : [],
+      tasks_tomorrow: store["tasks_tomorrow"] ? JSON.parse(store["tasks_tomorrow"]) : [],
       home_tasks: store["home_tasks"] ? JSON.parse(store["home_tasks"]) : [],
-      calendar_events: store["calendar_events"]
-        ? JSON.parse(store["calendar_events"])
-        : {},
+      calendar_events: store["calendar_events"] ? JSON.parse(store["calendar_events"]) : {},
       notes: store["notes"] ? JSON.parse(store["notes"]) : [],
       vault_files: store["vault_files"] ? JSON.parse(store["vault_files"]) : [],
       day_start: store["day_start"] || "00:00",
       backup_frequency: store["backup_frequency"] || "manual",
+      home_screen_settings: store["home_screen_settings"] || {
+        showClock: true,
+        showTasks: true,
+        showSummary: false,
+        showHistory: false
+      }
     };
   };
 
@@ -110,10 +137,7 @@ export default function SettingsScreen() {
     try {
       const data = collectAllData();
       const jsonString = JSON.stringify(data, null, 2);
-      const fileName = `ixi_backup_${new Date()
-        .toISOString()
-        .split("T")[0]}.json`;
-
+      const fileName = `ixi_backup_${new Date().toISOString().split("T")[0]}.json`;
       const tempPath = FileSystem.documentDirectory + fileName;
       await FileSystem.writeAsStringAsync(tempPath, jsonString);
 
@@ -121,19 +145,15 @@ export default function SettingsScreen() {
         await Sharing.shareAsync(tempPath, {
           mimeType: "application/json",
           dialogTitle: "Save Backup",
-          UTI: "public.json",
+          UTI: "public.json"
         });
       }
 
       const now = new Date();
-      const dateStr = `${now.toLocaleDateString()} ${now.toLocaleTimeString(
-        [],
-        { hour: "2-digit", minute: "2-digit" }
-      )}`;
+      const dateStr = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       setLastBackup(dateStr);
       store["last_backup"] = dateStr;
       setShowBackupModal(false);
-
       Alert.alert("Backup Created", `File saved as ${fileName}`);
     } catch {
       Alert.alert("Error", "Failed to create backup");
@@ -144,7 +164,7 @@ export default function SettingsScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: "application/json",
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: true
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
@@ -153,499 +173,320 @@ export default function SettingsScreen() {
         const data: AppData = JSON.parse(jsonString);
 
         if (!data.version || !data.timestamp) {
-          Alert.alert(
-            "Invalid Backup",
-            "This file is not a valid Shimer backup."
-          );
+          Alert.alert("Invalid Backup", "This file is not a valid Shimer backup.");
           return;
         }
 
         Alert.alert(
           "Restore Backup",
-          `Restore backup from ${new Date(
-            data.timestamp
-          ).toLocaleString()}? This will replace all current data.`,
+          `Restore backup from ${new Date(data.timestamp).toLocaleString()}? This will replace all current data.`,
           [
             { text: "Cancel", style: "cancel" },
             {
               text: "Restore",
               onPress: () => {
-                if (data.checklists)
-                  store["checklists"] = JSON.stringify(data.checklists);
-                if (data.tasks_today)
-                  store["tasks_today"] = JSON.stringify(data.tasks_today);
-                if (data.tasks_tomorrow)
-                  store["tasks_tomorrow"] = JSON.stringify(data.tasks_tomorrow);
-                if (data.home_tasks)
-                  store["home_tasks"] = JSON.stringify(data.home_tasks);
-                if (data.calendar_events)
-                  store["calendar_events"] = JSON.stringify(
-                    data.calendar_events
-                  );
+                if (data.checklists) {
+                  const { setChecklists } = require("../activitiesStore");
+                  setChecklists(data.checklists);
+                }
+                if (data.tasks_today) store["tasks_today"] = JSON.stringify(data.tasks_today);
+                if (data.tasks_tomorrow) store["tasks_tomorrow"] = JSON.stringify(data.tasks_tomorrow);
+                if (data.home_tasks) store["home_tasks"] = JSON.stringify(data.home_tasks);
+                if (data.calendar_events) store["calendar_events"] = JSON.stringify(data.calendar_events);
                 if (data.notes) store["notes"] = JSON.stringify(data.notes);
-                if (data.vault_files)
-                  store["vault_files"] = JSON.stringify(data.vault_files);
+                if (data.vault_files) store["vault_files"] = JSON.stringify(data.vault_files);
                 if (data.day_start) store["day_start"] = data.day_start;
-                if (data.backup_frequency)
-                  store["backup_frequency"] = data.backup_frequency;
+                if (data.backup_frequency) store["backup_frequency"] = data.backup_frequency;
+                if (data.home_screen_settings) store["home_screen_settings"] = data.home_screen_settings;
 
-                setChecklists(
-                  data.checklists || [
-                    { title: "University", icon: "school-outline", items: [] },
-                  ]
-                );
                 setBackupFrequency(data.backup_frequency || "manual");
+                setDayStart(data.day_start || "00:00");
+                const homeSettings = data.home_screen_settings || {
+                  showClock: true, showTasks: true, showSummary: false, showHistory: false
+                };
+                const visible = [];
+                if (homeSettings.showClock) visible.push("Clock");
+                if (homeSettings.showTasks) visible.push("Tasks");
+                if (homeSettings.showSummary) visible.push("Summary");
+                if (homeSettings.showHistory) visible.push("History");
+                setHomeScreenSummary(visible.length ? visible.join(", ") : "Nothing shown");
 
-                Alert.alert(
-                  "Restored",
-                  "All data has been restored successfully."
-                );
+                Alert.alert("Restored", "All data has been restored successfully.");
                 setShowBackupModal(false);
-              },
-            },
+              }
+            }
           ]
         );
       }
     } catch {
-      Alert.alert(
-        "Error",
-        "Failed to restore backup. Make sure the file is a valid JSON backup."
-      );
+      Alert.alert("Error", "Failed to restore backup.");
     }
   };
 
-  const handleBackupNow = () => {
-    handleCreateBackup();
-  };
-
+  const handleBackupNow = () => handleCreateBackup();
   const selectFrequency = (freq: string) => {
     setBackupFrequency(freq);
     store["backup_frequency"] = freq;
   };
 
+  const SectionHeader = ({ icon, title }: { icon: string; title: string }) => (
+    <View style={styles.sectionHeaderContainer}>
+      <Ionicons name={icon as any} size={16} color="#fff" />
+      <Text style={styles.sectionHeader}>{title}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
+      {/* Header with back arrow */}
       <View style={styles.header}>
-        <Text style={styles.headerText}>Settings</Text>
+        <TouchableOpacity onPress={() => router.replace('/')} style={styles.headerLeft}>
+          <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.headerRight} />
       </View>
 
-      <ScrollView style={styles.scrollView}>
-        {/* How to Use the App */}
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/how-to-use")}
-        >
-          <Ionicons name="information-circle-outline" size={24} color="#fff" />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* How to Use & What's New */}
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/how-to-use"); }}>
+          <Ionicons name="information-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
           <Text style={styles.rowText}>How to Use the App</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* What's New */}
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/whats-new")}
-        >
-          <Ionicons name="sparkles-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/whats-new"); }}>
+          <Ionicons name="sparkles-outline" size={22} color={shadcn.colors.mutedForeground} />
           <Text style={styles.rowText}>What&apos;s New</Text>
-          <Text style={styles.badge}>9mo</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* CHECKLISTS Section */}
-        <Text style={styles.sectionHeader}>CHECKLISTS</Text>
+        {/* CHECKLISTS */}
+        <SectionHeader icon="" title="CHECKLISTS" />
         {checklists.map((list, index) => (
           <TouchableOpacity
             key={index}
             style={styles.row}
-            onPress={() =>
-              router.push({
-                pathname: "/edit-checklist",
-                params: {
-                  checklist: JSON.stringify(list),
-                  checklistIndex: index,
-                },
-              })
-            }
+            activeOpacity={0.7}
+            onPress={() => {
+              lightHaptic();
+              router.push({ pathname: "/edit-checklist", params: { checklistIndex: index.toString() } });
+            }}
           >
-            <Ionicons name="school-outline" size={24} color="#fff" />
+            <Ionicons name={list.icon as any} size={22} color={shadcn.colors.foreground} />
             <Text style={styles.rowText}>{list.title}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
+            <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
           </TouchableOpacity>
         ))}
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/new-checklist")}
-        >
-          <Ionicons name="add-circle-outline" size={24} color="#666" />
-          <Text style={[styles.rowText, { color: "#666" }]}>New Checklist</Text>
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-checklist"); }}>
+          <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
+          <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Checklist</Text>
         </TouchableOpacity>
 
-        {/* SHORTCUTS Section */}
-        <Text style={styles.sectionHeader}>SHORTCUTS</Text>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="musical-notes-outline" size={24} color="#fff" />
-          <Text style={styles.rowText}>Music</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/new-shortcut")}
-        >
-          <Ionicons name="add-circle-outline" size={24} color="#666" />
-          <Text style={[styles.rowText, { color: "#666" }]}>New Shortcut</Text>
+        {/* SHORTCUTS */}
+        <SectionHeader icon="" title="SHORTCUTS" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-shortcut"); }}>
+          <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
+          <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Shortcut</Text>
         </TouchableOpacity>
 
-        {/* NOTES Section */}
-        <Text style={styles.sectionHeader}>NOTES</Text>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="videocam-outline" size={24} color="#fff" />
-          <Text style={styles.rowText}>📷 Video Idea</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/new-note")}
-        >
-          <Ionicons name="add-circle-outline" size={24} color="#666" />
-          <Text style={[styles.rowText, { color: "#666" }]}>New Note</Text>
+        {/* NOTES */}
+        <SectionHeader icon="" title="NOTES" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-note"); }}>
+          <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
+          <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Note</Text>
         </TouchableOpacity>
 
-        {/* SETTINGS Section */}
-        <Text style={styles.sectionHeader}>SETTINGS</Text>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/folders")}
-        >
-          <Ionicons name="folder-outline" size={24} color="#fff" />
+        {/* SETTINGS */}
+        <SectionHeader icon="" title="SETTINGS" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/folders"); }}>
+          <Ionicons name="folder-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Folders</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/day-start")}
-        >
-          <Ionicons name="time-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/day-start"); }}>
+          <Ionicons name="time-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Day Start</Text>
-          <Text style={styles.valueText}>00:00</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Text style={styles.valueText}>{dayStart}</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/home-screen-settings")}
-        >
-          <Ionicons name="home-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/home-screen-settings"); }}>
+          <Ionicons name="home-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Home Screen</Text>
-          <Text style={styles.valueText}>Today on Home Screen</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Text style={styles.valueText}>{homeScreenSummary}</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* BACKUPS Section */}
-        <Text style={styles.sectionHeader}>BACKUPS</Text>
-        <TouchableOpacity style={styles.row} onPress={handleCreateBackup}>
-          <Ionicons name="cloud-upload-outline" size={24} color="#fff" />
+        {/* BACKUPS */}
+        <SectionHeader icon="" title="BACKUPS" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); handleCreateBackup(); }}>
+          <Ionicons name="cloud-upload-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Create Backup</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} onPress={handleRestoreBackup}>
-          <Ionicons name="cloud-download-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); handleRestoreBackup(); }}>
+          <Ionicons name="cloud-download-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Restore Backup</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => setShowBackupModal(true)}
-        >
-          <Ionicons name="sync-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); setShowBackupModal(true); }}>
+          <Ionicons name="sync-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Auto Backup</Text>
           <Text style={styles.valueText}>
-            {backupFrequency === "manual"
-              ? "Manual"
-              : backupFrequency === "daily"
-                ? "Daily"
-                : backupFrequency === "weekly"
-                  ? "Weekly"
-                  : "Monthly"}
+            {backupFrequency === "manual" ? "Manual" : backupFrequency === "daily" ? "Daily" : backupFrequency === "weekly" ? "Weekly" : "Monthly"}
           </Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* NOTIFICATIONS Section */}
-        <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="alarm-outline" size={24} color="#fff" />
+        {/* NOTIFICATIONS */}
+        <SectionHeader icon="" title="NOTIFICATIONS" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
+          <Ionicons name="alarm-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Time to Break</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="timer-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
+          <Ionicons name="timer-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Timer Overdue</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="notifications-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
+          <Ionicons name="notifications-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Persistent Notification</Text>
           <Text style={styles.valueText}>Not Granted</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* SECURE FILE VAULT */}
-        <Text style={styles.sectionHeader}>SECURE FILE</Text>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/secure-files")}
-        >
-          <Ionicons name="lock-closed-outline" size={24} color="#fff" />
+        {/* SECURE FILE */}
+        <SectionHeader icon="" title="SECURE FILE" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/secure-files"); }}>
+          <Ionicons name="lock-closed-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Secure File Vault</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* About Section */}
-        <Text style={styles.sectionHeader}>ABOUT</Text>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/ask-question")}
-        >
-          <Ionicons name="help-circle-outline" size={24} color="#fff" />
+        {/* ABOUT */}
+        <SectionHeader icon="" title="ABOUT" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/ask-question"); }}>
+          <Ionicons name="help-circle-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Ask a Question</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/open-source")}
-        >
-          <Ionicons name="code-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/open-source"); }}>
+          <Ionicons name="code-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Open Source</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push("/privacy")}
-        >
-          <Ionicons name="shield-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/privacy"); }}>
+          <Ionicons name="shield-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Privacy</Text>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>Shimer for Android</Text>
           <Text style={styles.versionText}>v2026.1.0</Text>
         </View>
-        <View style={{ height: 10 }} />
       </ScrollView>
 
       {/* Backup Modal */}
-      <Modal visible={showBackupModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={showBackupModal} transparent animationType="slide" onRequestClose={() => setShowBackupModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowBackupModal(false)}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Backup Settings</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Backup Settings</Text>
+              <TouchableOpacity onPress={() => setShowBackupModal(false)}>
+                <Ionicons name="close" size={24} color={shadcn.colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={styles.modalSection}>Frequency</Text>
-            <TouchableOpacity
-              style={[
-                styles.modalOption,
-                backupFrequency === "manual" && styles.modalOptionSelected,
-              ]}
-              onPress={() => selectFrequency("manual")}
-            >
-              <Ionicons
-                name="hand-left-outline"
-                size={22}
-                color={backupFrequency === "manual" ? "#4ECDC4" : "#fff"}
-              />
-              <Text
-                style={[
-                  styles.modalOptionText,
-                  backupFrequency === "manual" && styles.modalOptionTextSelected,
-                ]}
+            <Text style={styles.modalSectionHeader}>FREQUENCY</Text>
+            {["manual", "daily", "weekly", "monthly"].map((freq) => (
+              <TouchableOpacity
+                key={freq}
+                style={[styles.modalOption, backupFrequency === freq && styles.modalOptionSelected]}
+                activeOpacity={0.7}
+                onPress={() => selectFrequency(freq)}
               >
-                Manual
-              </Text>
-              {backupFrequency === "manual" && (
-                <Ionicons name="checkmark" size={20} color="#4ECDC4" />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.modalOption,
-                backupFrequency === "daily" && styles.modalOptionSelected,
-              ]}
-              onPress={() => selectFrequency("daily")}
-            >
-              <Ionicons
-                name="today-outline"
-                size={22}
-                color={backupFrequency === "daily" ? "#4ECDC4" : "#fff"}
-              />
-              <Text
-                style={[
-                  styles.modalOptionText,
-                  backupFrequency === "daily" && styles.modalOptionTextSelected,
-                ]}
-              >
-                Daily
-              </Text>
-              {backupFrequency === "daily" && (
-                <Ionicons name="checkmark" size={20} color="#4ECDC4" />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.modalOption,
-                backupFrequency === "weekly" && styles.modalOptionSelected,
-              ]}
-              onPress={() => selectFrequency("weekly")}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={22}
-                color={backupFrequency === "weekly" ? "#4ECDC4" : "#fff"}
-              />
-              <Text
-                style={[
-                  styles.modalOptionText,
-                  backupFrequency === "weekly" && styles.modalOptionTextSelected,
-                ]}
-              >
-                Weekly
-              </Text>
-              {backupFrequency === "weekly" && (
-                <Ionicons name="checkmark" size={20} color="#4ECDC4" />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.modalOption,
-                backupFrequency === "monthly" && styles.modalOptionSelected,
-              ]}
-              onPress={() => selectFrequency("monthly")}
-            >
-              <Ionicons
-                name="calendar-number-outline"
-                size={22}
-                color={backupFrequency === "monthly" ? "#4ECDC4" : "#fff"}
-              />
-              <Text
-                style={[
-                  styles.modalOptionText,
-                  backupFrequency === "monthly" &&
-                  styles.modalOptionTextSelected,
-                ]}
-              >
-                Monthly
-              </Text>
-              {backupFrequency === "monthly" && (
-                <Ionicons name="checkmark" size={20} color="#4ECDC4" />
-              )}
-            </TouchableOpacity>
+                <Ionicons
+                  name={freq === "manual" ? "hand-left-outline" : freq === "daily" ? "today-outline" : freq === "weekly" ? "calendar-outline" : "calendar-number-outline"}
+                  size={22}
+                  color={backupFrequency === freq ? "#fff" : shadcn.colors.foreground}
+                />
+                <Text style={[styles.modalOptionText, backupFrequency === freq && styles.modalOptionTextSelected]}>
+                  {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                </Text>
+                {backupFrequency === freq && <Ionicons name="checkmark" size={20} color="#fff" />}
+              </TouchableOpacity>
+            ))}
 
-            <Text style={styles.modalSection}>Last Backup</Text>
+            <Text style={[styles.modalSectionHeader, { marginTop: 24 }]}>LAST BACKUP</Text>
             <Text style={styles.lastBackupText}>{lastBackup}</Text>
 
-            <TouchableOpacity
-              style={styles.backupNowButton}
-              onPress={handleBackupNow}
-            >
+            <TouchableOpacity style={styles.backupNowButton} activeOpacity={0.8} onPress={handleBackupNow}>
               <Ionicons name="cloud-upload" size={22} color="#000" />
               <Text style={styles.backupNowText}>Create Backup Now</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.modalClose}
-              onPress={() => setShowBackupModal(false)}
-            >
-              <Text style={styles.modalCloseText}>Close</Text>
-            </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20 },
-  headerText: {
-    color: "#fff",
-    fontSize: 34,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  scrollView: { flex: 1, paddingHorizontal: 16 },
-  sectionHeader: {
-    color: "#888",
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 24,
-    marginBottom: 8,
-    marginLeft: 8,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-    gap: 12,
-  },
-  rowText: { color: "#fff", fontSize: 16, flex: 1 },
-  badge: { color: "#888", fontSize: 14, marginRight: 8 },
-  valueText: { color: "#888", fontSize: 14, marginRight: 8 },
-  versionContainer: { marginTop: 30, marginBottom: 40, alignItems: "center" },
-  versionText: { color: "#555", fontSize: 13, marginTop: 4 },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#111",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 20,
-  },
-  modalSection: {
-    color: "#888",
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    marginBottom: 6,
-    gap: 12,
-  },
-  modalOptionSelected: { backgroundColor: "#1a3a3a" },
-  modalOptionText: { color: "#fff", fontSize: 16, flex: 1 },
-  modalOptionTextSelected: { color: "#4ECDC4", fontWeight: "600" },
-  lastBackupText: { color: "#888", fontSize: 15, marginBottom: 20 },
-  backupNowButton: {
+  container: { flex: 1, backgroundColor: shadcn.colors.background },
+  header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#4ECDC4",
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-    marginBottom: 12,
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomColor: shadcn.colors.border,
+    marginBottom: shadcn.spacing.lg,
   },
-  backupNowText: { color: "#000", fontSize: 16, fontWeight: "700" },
-  modalClose: { alignItems: "center", paddingVertical: 12 },
-  modalCloseText: { color: "#888", fontSize: 16 },
+  headerLeft: {
+    position: 'absolute',
+    left: 16,
+    top: 60,
+  },
+  headerRight: {
+    position: 'absolute',
+    right: 16,
+    top: 60,
+  },
+  headerTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: 'center',
+  },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: shadcn.spacing.lg, paddingBottom: 40 },
+  sectionHeaderContainer: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: shadcn.spacing.xxl, marginBottom: shadcn.spacing.sm, marginLeft: shadcn.spacing.sm },
+  sectionHeader: { ...shadcn.typography.sectionHeader, color: shadcn.colors.mutedForeground },
+  row: { flexDirection: "row", alignItems: "center", backgroundColor: shadcn.colors.card, paddingVertical: shadcn.spacing.md + 4, paddingHorizontal: shadcn.spacing.md, borderRadius: shadcn.radius.lg, marginBottom: shadcn.spacing.xs, gap: shadcn.spacing.md },
+  rowText: { ...shadcn.typography.body, color: shadcn.colors.foreground, flex: 1 },
+  badge: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },
+  valueText: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },
+  versionContainer: { marginTop: 40, marginBottom: 20, alignItems: "center" },
+  versionText: { ...shadcn.typography.caption, color: shadcn.colors.mutedForeground, marginTop: shadcn.spacing.xs },
+  emptyText: { ...shadcn.typography.bodySmall, color: shadcn.colors.mutedForeground, textAlign: "center", marginVertical: shadcn.spacing.md },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
+  modalContent: { backgroundColor: shadcn.colors.popover, borderTopLeftRadius: shadcn.radius.xl, borderTopRightRadius: shadcn.radius.xl, padding: shadcn.spacing.xxl, maxHeight: "80%" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: shadcn.spacing.lg },
+  modalTitle: { ...shadcn.typography.body, fontWeight: "600", color: shadcn.colors.popoverForeground },
+  modalSectionHeader: { ...shadcn.typography.sectionHeader, color: shadcn.colors.mutedForeground, marginBottom: shadcn.spacing.sm },
+  modalOption: { flexDirection: "row", alignItems: "center", backgroundColor: shadcn.colors.secondary, paddingVertical: shadcn.spacing.md + 4, paddingHorizontal: shadcn.spacing.md, borderRadius: shadcn.radius.lg, marginBottom: shadcn.spacing.sm, gap: shadcn.spacing.md },
+  modalOptionSelected: { backgroundColor: shadcn.colors.accent, borderWidth: 1, borderColor: "#fff" },
+  modalOptionText: { ...shadcn.typography.body, color: shadcn.colors.foreground, flex: 1 },
+  modalOptionTextSelected: { color: "#fff", fontWeight: "600" },
+  lastBackupText: { ...shadcn.typography.bodySmall, color: shadcn.colors.mutedForeground, marginBottom: shadcn.spacing.xl },
+  backupNowButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#fff", paddingVertical: shadcn.spacing.md + 4, borderRadius: shadcn.radius.lg, gap: shadcn.spacing.sm, marginBottom: shadcn.spacing.md },
+  backupNowText: { ...shadcn.typography.body, fontWeight: "700", color: "#000" }
 });

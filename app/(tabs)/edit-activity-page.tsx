@@ -2,10 +2,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, FlatList, Alert, Switch,
+  TextInput, Modal, FlatList, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { getActivities, setActivities, updateGoal, Activity } from '../activitiesStore';
 
 const iconOptions = [
   'folder-outline', 'school-outline', 'book-outline', 'film-outline',
@@ -24,18 +25,19 @@ const colorOptions = [
 export default function EditActivityPage() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const activityId = params.id as string;
+
+  // Load activity data from store
+  const activity = getActivities().find(a => a.id === activityId);
 
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Form states
-  const [formName, setFormName] = useState(params.name as string || '');
-  const [formIcon, setFormIcon] = useState(params.icon as string || 'folder-outline');
-  const [formColor, setFormColor] = useState(params.color as string || '#FF6B6B');
-  const [formKeepScreenOn, setFormKeepScreenOn] = useState(params.keepScreenOn === 'true');
-  const [formPomodoro, setFormPomodoro] = useState(params.pomodoro as string || '25');
-  const [formGoals, setFormGoals] = useState(params.goals as string || '');
-  const [formTimerHints, setFormTimerHints] = useState(params.timerHints as string || '');
+  // Form states - initialize from store
+  const [formName, setFormName] = useState(params.name as string || activity?.name || '');
+  const [formIcon, setFormIcon] = useState(params.icon as string || activity?.icon || 'folder-outline');
+  const [formColor, setFormColor] = useState(params.color as string || activity?.color || '#FF6B6B');
+  const [formPomodoro, setFormPomodoro] = useState(params.pomodoro as string || String(activity?.pomodoro || '25'));
 
   const handleSave = () => {
     if (!formName.trim()) {
@@ -43,6 +45,21 @@ export default function EditActivityPage() {
       return;
     }
 
+    const activities = getActivities();
+    const updatedActivities = activities.map(a => {
+      if (a.id === activityId) {
+        return {
+          ...a,
+          name: formName.trim(),
+          icon: formIcon,
+          color: formColor,
+          pomodoro: parseInt(formPomodoro) || 25,
+        };
+      }
+      return a;
+    });
+
+    setActivities(updatedActivities);
     Alert.alert('Success', 'Activity updated successfully!', [
       { text: 'OK', onPress: () => router.back() }
     ]);
@@ -58,9 +75,10 @@ export default function EditActivityPage() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Deleted', 'Activity has been deleted', [
-              { text: 'OK', onPress: () => router.back() }
-            ]);
+            const activities = getActivities();
+            const filtered = activities.filter(a => a.id !== activityId);
+            setActivities(filtered);
+            router.back();
           }
         }
       ]
@@ -71,17 +89,19 @@ export default function EditActivityPage() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerLeft}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Activity</Text>
-        <TouchableOpacity onPress={handleSave}>
-          <Text style={styles.saveButton}>Save</Text>
+        <TouchableOpacity onPress={handleSave} style={styles.headerRight}>
+          <View style={styles.doneButtonContainer}>
+            <Text style={styles.doneButton}>Save</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Activity Preview Card - Smaller */}
+        {/* Activity Preview Card */}
         <View style={styles.previewCard}>
           <View style={[styles.previewIconContainer, { backgroundColor: formColor + '20' }]}>
             <Ionicons name={formIcon} size={32} color={formColor} />
@@ -91,7 +111,6 @@ export default function EditActivityPage() {
 
         {/* Activity Name */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
           <TextInput
             style={styles.nameInput}
             placeholder="Activity Name"
@@ -103,7 +122,6 @@ export default function EditActivityPage() {
 
         {/* Icon Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
           <TouchableOpacity style={styles.optionRow} onPress={() => setShowIconPicker(true)}>
             <View style={styles.optionLeft}>
               <Ionicons name="image-outline" size={20} color="#888" />
@@ -129,21 +147,6 @@ export default function EditActivityPage() {
 
         {/* Timer Settings */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Timer Settings</Text>
-
-          <View style={styles.optionRow}>
-            <View style={styles.optionLeft}>
-              <Ionicons name="desktop-outline" size={20} color="#888" />
-              <Text style={styles.optionLabel}>Keep Screen On</Text>
-            </View>
-            <Switch
-              value={formKeepScreenOn}
-              onValueChange={setFormKeepScreenOn}
-              trackColor={{ false: '#333', true: '#666' }}
-              thumbColor={formKeepScreenOn ? '#fff' : '#888'}
-            />
-          </View>
-
           <View style={styles.optionRow}>
             <View style={styles.optionLeft}>
               <Ionicons name="timer-outline" size={20} color="#888" />
@@ -163,45 +166,38 @@ export default function EditActivityPage() {
           </View>
         </View>
 
-        {/* Goals & Hints */}
+        {/* Checklists */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Goals & Hints</Text>
+          <TouchableOpacity style={styles.optionRow} onPress={() => router.push('/goal-checklists')}>
+            <View style={styles.optionLeft}>
+              <Ionicons name="checkbox-outline" size={20} color="#888" />
+              <Text style={styles.optionLabel}>Manage Checklists</Text>
+            </View>
+            <View style={styles.optionRight}>
+              <Text style={styles.optionValue}>None</Text>
+              <Ionicons name="chevron-forward" size={18} color="#555" />
+            </View>
+          </TouchableOpacity>
 
-          <View style={styles.textAreaContainer}>
-            <Text style={styles.textAreaLabel}>Goals</Text>
-            <TextInput
-              style={styles.textArea}
-              value={formGoals}
-              onChangeText={setFormGoals}
-              placeholder="Set your goals for this activity..."
-              placeholderTextColor="#555"
-              multiline
-              numberOfLines={2}
-            />
-          </View>
-
-          <View style={styles.textAreaContainer}>
-            <Text style={styles.textAreaLabel}>Timer Hints</Text>
-            <TextInput
-              style={styles.textArea}
-              value={formTimerHints}
-              onChangeText={setFormTimerHints}
-              placeholder="Add helpful hints for timer sessions..."
-              placeholderTextColor="#555"
-              multiline
-              numberOfLines={2}
-            />
-          </View>
+          <TouchableOpacity style={styles.optionRow} onPress={() => router.push('/new-shortcut')}>
+            <View style={styles.optionLeft}>
+              <Ionicons name="link-outline" size={20} color="#888" />
+              <Text style={styles.optionLabel}>Manage Shortcuts</Text>
+            </View>
+            <View style={styles.optionRight}>
+              <Text style={styles.optionValue}>None</Text>
+              <Ionicons name="chevron-forward" size={18} color="#555" />
+            </View>
+          </TouchableOpacity>
         </View>
-
-        {/* Delete Button */}
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-          <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-          <Text style={styles.deleteButtonText}>Delete Activity</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 60 }} />
       </ScrollView>
+
+      {/* Delete Button */}
+      <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+        <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+        <Text style={styles.deleteButtonText}>Delete</Text>
+      </TouchableOpacity>
 
       {/* Icon Picker Modal */}
       <Modal visible={showIconPicker} transparent animationType="slide">
@@ -281,23 +277,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#1a1a1a',
   },
+  headerLeft: {
+    position: 'absolute',
+    left: 16,
+    top: 60,
+  },
+  headerRight: {
+    position: 'absolute',
+    right: 16,
+    top: 60,
+  },
   headerTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
   },
-  saveButton: {
-    color: '#4ECDC4',
-    fontSize: 17,
+  doneButtonContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  doneButton: {
+    color: '#000',
+    fontSize: 13,
     fontWeight: '600',
   },
   scrollView: {
@@ -330,14 +343,6 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: 16,
     marginBottom: 20,
-  },
-  sectionTitle: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   nameInput: {
     color: '#fff',
@@ -401,43 +406,21 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 13,
   },
-  textAreaContainer: {
-    marginBottom: 12,
-  },
-  textAreaLabel: {
-    color: '#888',
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  textArea: {
-    color: '#fff',
-    fontSize: 14,
-    backgroundColor: '#0a0a0a',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#1a1a1a',
-    textAlignVertical: 'top',
-    minHeight: 70,
-  },
   deleteButton: {
+    position: 'absolute',
+    bottom: 10,
+    left: 3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    marginHorizontal: 16,
-    marginTop: 16,
-    paddingVertical: 12,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FF6B6B30',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
   deleteButtonText: {
     color: '#FF6B6B',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '400',
   },
   modalOverlay: {
     flex: 1,
@@ -485,5 +468,10 @@ const styles = StyleSheet.create({
   colorItemSelected: {
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  optionValue: {
+    color: '#888',
+    fontSize: 13,
+    marginRight: 8,
   },
 });

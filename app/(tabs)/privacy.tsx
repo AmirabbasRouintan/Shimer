@@ -1,7 +1,15 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { shadcn } from "../../constants/components-theme";
 
 export default function PrivacyScreen() {
   const router = useRouter();
@@ -9,11 +17,15 @@ export default function PrivacyScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
+        <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={shadcn.colors.foreground}
+          />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacy</Text>
-        <View style={{ width: 22 }} />
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView style={styles.content}>
@@ -21,53 +33,119 @@ export default function PrivacyScreen() {
 
         <Text style={styles.sectionTitle}>Our Promise</Text>
         <Text style={styles.paragraph}>
-          Your data belongs to you. Shimer stores all your information locally on your device. We do not collect, store, or transmit any personal data to external servers.
+          <Text style={styles.bold}>Your data belongs to you.</Text> Shimer stores all your information
+          <Text style={styles.highlight}> locally on your device</Text>. We do not collect, store, or transmit
+          any personal data to external servers.
         </Text>
 
         <Text style={styles.sectionTitle}>Data Storage</Text>
         <Text style={styles.paragraph}>
-          All your tasks, checklists, notes, calendar events, files, and settings are stored exclusively on your device. Nothing leaves your phone unless you explicitly export a backup.
+          All your tasks, checklists, notes, calendar events, files, and settings are stored
+          <Text style={styles.highlight}> exclusively on your device</Text>.
+          <Text style={styles.bold}> Nothing leaves your phone</Text> unless you explicitly export a backup.
         </Text>
 
         <Text style={styles.sectionTitle}>What We Don't Collect</Text>
         <View style={styles.bulletRow}>
-          <Ionicons name="close-circle" size={18} color="#FF4444" />
-          <Text style={styles.bulletText}>Personal information (name, email, location)</Text>
+          <Ionicons
+            name="close-circle"
+            size={18}
+            color="#FF3B30"
+          />
+          <Text style={styles.bulletText}>
+            <Text style={styles.bold}>Personal information</Text> (name, email, location)
+          </Text>
         </View>
         <View style={styles.bulletRow}>
-          <Ionicons name="close-circle" size={18} color="#FF4444" />
-          <Text style={styles.bulletText}>Usage analytics or tracking data</Text>
+          <Ionicons
+            name="close-circle"
+            size={18}
+            color="#FF3B30"
+          />
+          <Text style={styles.bulletText}>
+            <Text style={styles.bold}>Usage analytics or tracking data</Text>
+          </Text>
         </View>
         <View style={styles.bulletRow}>
-          <Ionicons name="close-circle" size={18} color="#FF4444" />
-          <Text style={styles.bulletText}>Device identifiers or fingerprints</Text>
+          <Ionicons
+            name="close-circle"
+            size={18}
+            color="#FF3B30"
+          />
+          <Text style={styles.bulletText}>
+            <Text style={styles.bold}>Device identifiers or fingerprints</Text>
+          </Text>
         </View>
         <View style={styles.bulletRow}>
-          <Ionicons name="close-circle" size={18} color="#FF4444" />
-          <Text style={styles.bulletText}>Network activity or browsing history</Text>
+          <Ionicons
+            name="close-circle"
+            size={18}
+            color="#FF3B30"
+          />
+          <Text style={styles.bulletText}>
+            <Text style={styles.bold}>Network activity or browsing history</Text>
+          </Text>
         </View>
 
         <Text style={styles.sectionTitle}>Permissions</Text>
         <Text style={styles.paragraph}>
-          The app may request the following permissions only when needed:
+          The app may request the following permissions
+          <Text style={styles.highlight}> only when needed</Text>:
         </Text>
         <View style={styles.bulletRow}>
-          <Ionicons name="camera-outline" size={18} color="#4ECDC4" />
-          <Text style={styles.bulletText}>Camera: For adding photos to notes (optional)</Text>
+          <Ionicons
+            name="camera-outline"
+            size={18}
+            color={shadcn.colors.brand}
+          />
+          <Text style={styles.bulletText}>
+            Camera: <Text style={styles.italic}>For adding photos to notes</Text>
+            <Text style={styles.muted}> (optional)</Text>
+          </Text>
         </View>
         <View style={styles.bulletRow}>
-          <Ionicons name="folder-outline" size={18} color="#4ECDC4" />
-          <Text style={styles.bulletText}>Storage: For saving and restoring backups (optional)</Text>
+          <Ionicons
+            name="folder-outline"
+            size={18}
+            color={shadcn.colors.brand}
+          />
+          <Text style={styles.bulletText}>
+            Storage: <Text style={styles.italic}>For saving and restoring backups</Text>
+            <Text style={styles.muted}> (optional)</Text>
+          </Text>
         </View>
         <View style={styles.bulletRow}>
-          <Ionicons name="finger-print-outline" size={18} color="#4ECDC4" />
-          <Text style={styles.bulletText}>Biometrics: For secure file vault access (optional)</Text>
+          <Ionicons
+            name="finger-print-outline"
+            size={18}
+            color={shadcn.colors.brand}
+          />
+          <Text style={styles.bulletText}>
+            Biometrics: <Text style={styles.italic}>For secure file vault access</Text>
+            <Text style={styles.muted}> (optional)</Text>
+          </Text>
         </View>
 
         <Text style={styles.sectionTitle}>Contact</Text>
-        <Text style={styles.paragraph}>
-          If you have any questions about privacy, contact us at privacy@ixiflower.app
-        </Text>
+        <View style={styles.contactRow}>
+          <Text style={styles.paragraph}>
+            If you have any questions about privacy, contact us at:{' '}
+          </Text>
+          <View style={styles.emailContainer}>
+            <Text style={[styles.bold, styles.highlight]}>amirabbas.rouintan2007@gmail.com</Text>
+            <TouchableOpacity
+              onPress={() => {
+                import('expo-clipboard').then(({ Clipboard }) => {
+                  Clipboard.setStringAsync('amirabbas.rouintan2007@gmail.com');
+                  Alert.alert("Copied!", "Email address copied to clipboard");
+                });
+              }}
+              style={styles.copyButton}
+            >
+              <Ionicons name="copy-outline" size={16} color={shadcn.colors.brand} />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -76,19 +154,95 @@ export default function PrivacyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+  container: { flex: 1, backgroundColor: shadcn.colors.background },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    position: "relative",
   },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
+  headerLeft: {
+    width: 60,
+    alignItems: "flex-start",
+  },
+  headerRight: {
+    width: 60,
+  },
+  headerTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+    flex: 1,
+  },
   content: { flex: 1, paddingHorizontal: 16 },
-  lastUpdated: { color: '#666', fontSize: 13, marginBottom: 16 },
-  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 24, marginBottom: 8 },
-  paragraph: { color: '#999', fontSize: 15, lineHeight: 22, marginBottom: 12 },
-  bulletRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    marginBottom: 8, gap: 10, paddingRight: 20,
+  lastUpdated: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 13,
+    marginBottom: 16,
+    fontStyle: "italic",
   },
-  bulletText: { color: '#999', fontSize: 15, lineHeight: 20, flex: 1 },
+  sectionTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 24,
+    marginBottom: 8,
+  },
+  paragraph: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    gap: 10,
+    paddingRight: 20,
+  },
+  bulletText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 15,
+    lineHeight: 20,
+    flex: 1,
+  },
+  bold: {
+    fontWeight: "700",
+    color: shadcn.colors.foreground,
+  },
+  highlight: {
+    color: shadcn.colors.brand,
+    fontWeight: "600",
+  },
+  italic: {
+    fontStyle: "italic",
+  },
+  muted: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 13,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: shadcn.colors.border,
+    marginVertical: 20,
+  },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  emailContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  copyButton: {
+    padding: 2,
+  },
 });
