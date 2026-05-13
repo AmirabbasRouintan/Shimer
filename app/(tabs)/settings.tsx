@@ -1,4 +1,7 @@
+// app/settings.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { getChecklists, subscribe, Checklist, getFolders, getDayStart } from "../activitiesStore";
+
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -16,7 +19,6 @@ import {
   View
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
-import { getChecklists, subscribe, Checklist } from "../activitiesStore";
 
 interface AppData {
   checklists?: Checklist[];
@@ -50,6 +52,7 @@ export default function SettingsScreen() {
   const params = useLocalSearchParams();
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [foldersCount, setFoldersCount] = useState(0);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [backupFrequency, setBackupFrequency] = useState("manual");
   const [lastBackup, setLastBackup] = useState("Never");
@@ -64,12 +67,39 @@ export default function SettingsScreen() {
     return unsubscribe;
   }, []);
 
-  // Load other settings from `store`
-  useFocusEffect(
-    useCallback(() => {
-      const savedDayStart = store["day_start"];
+  // Load folders count
+  useEffect(() => {
+    const updateFoldersCount = () => {
+      const folders = getFolders();
+      setFoldersCount(folders.length);
+    };
+    updateFoldersCount();
+    const unsubscribe = subscribe(updateFoldersCount);
+    return unsubscribe;
+  }, []);
+
+  // day start
+  useEffect(() => {
+    const updateDayStart = () => {
+      const savedDayStart = getDayStart();
       if (savedDayStart) setDayStart(savedDayStart);
       else setDayStart("00:00");
+    };
+
+    updateDayStart();
+    const unsubscribe = subscribe(updateDayStart);
+    return unsubscribe;
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const savedDayStart = getDayStart();
+      if (savedDayStart) {
+        const hour = parseInt(savedDayStart.split(":")[0]);
+        setDayStart(savedDayStart);
+      } else {
+        setDayStart("00:00");
+      }
 
       const homeSettings = store["home_screen_settings"];
       if (homeSettings) {
@@ -306,6 +336,7 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/folders"); }}>
           <Ionicons name="folder-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Folders</Text>
+          <Text style={styles.valueText}>{foldersCount}</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/day-start"); }}>
@@ -388,7 +419,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Shimer for Android</Text>
+          <Text style={styles.versionText}>Shimer</Text>
           <Text style={styles.versionText}>v2026.1.0</Text>
         </View>
       </ScrollView>
@@ -470,7 +501,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: shadcn.spacing.lg, paddingBottom: 40 },
   sectionHeaderContainer: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: shadcn.spacing.xxl, marginBottom: shadcn.spacing.sm, marginLeft: shadcn.spacing.sm },
   sectionHeader: { ...shadcn.typography.sectionHeader, color: shadcn.colors.mutedForeground },
-  row: { flexDirection: "row", alignItems: "center", backgroundColor: shadcn.colors.card, paddingVertical: shadcn.spacing.md + 4, paddingHorizontal: shadcn.spacing.md, borderRadius: shadcn.radius.lg, marginBottom: shadcn.spacing.xs, gap: shadcn.spacing.md },
+  row: { flexDirection: "row", alignItems: "center", backgroundColor: shadcn.colors.card, paddingVertical: shadcn.spacing.md, paddingHorizontal: shadcn.spacing.md, borderRadius: shadcn.radius.lg, marginBottom: shadcn.spacing.xs, gap: shadcn.spacing.md },
   rowText: { ...shadcn.typography.body, color: shadcn.colors.foreground, flex: 1 },
   badge: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },
   valueText: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },

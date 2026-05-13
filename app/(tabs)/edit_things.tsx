@@ -4,12 +4,12 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
-  FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import DragList from "react-native-draglist";
 import { shadcn } from "../../constants/components-theme";
 import { getActivities, setActivities, subscribe, Activity } from "../activitiesStore";
 
@@ -67,10 +67,17 @@ export default function EditThingsScreen() {
     );
   };
 
-  const renderActivityItem = ({ item, index }: { item: Activity; index: number }) => (
-    <View style={styles.activityRowWrapper}>
+  const onReordered = (fromIndex: number, toIndex: number) => {
+    const newActivities = [...activities];
+    const [movedItem] = newActivities.splice(fromIndex, 1);
+    newActivities.splice(toIndex, 0, movedItem);
+    saveActivities(newActivities);
+  };
+
+  const renderItem = ({ item, index, onDragStart, onDragEnd, isActive }: any) => {
+    return (
       <TouchableOpacity
-        style={styles.activityRow}
+        style={[styles.activityRowWrapper, isActive && styles.draggingActive]}
         onPress={() =>
           router.push({
             pathname: "/edit-activity-page",
@@ -86,28 +93,33 @@ export default function EditThingsScreen() {
             }
           })
         }
+        onLongPress={onDragStart}
+        onPressOut={onDragEnd}
+        delayLongPress={150}
         activeOpacity={0.7}
       >
-        <View style={styles.dragHandle}>
-          <Ionicons name="menu-outline" size={16} color={shadcn.colors.mutedForeground} />
-        </View>
-        <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-        <Ionicons name={item.icon as any} size={18} color={shadcn.colors.mutedForeground} style={styles.activityIcon} />
-        <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
-        <View style={styles.rowActions}>
-          <TouchableOpacity onPress={() => moveUp(index)} style={styles.actionButton} disabled={index === 0}>
-            <Ionicons name="arrow-up" size={16} color={index === 0 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => moveDown(index)} style={styles.actionButton} disabled={index === activities.length - 1}>
-            <Ionicons name="arrow-down" size={16} color={index === activities.length - 1 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDelete(item, index)} style={styles.actionButton}>
-            <Ionicons name="trash-outline" size={16} color={shadcn.colors.destructive} />
-          </TouchableOpacity>
+        <View style={styles.activityRow}>
+          <View style={styles.dragHandle}>
+            <Ionicons name="menu-outline" size={20} color={shadcn.colors.mutedForeground} />
+          </View>
+          <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
+          <Ionicons name={item.icon as any} size={18} color={shadcn.colors.mutedForeground} style={styles.activityIcon} />
+          <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
+          <View style={styles.rowActions}>
+            <TouchableOpacity onPress={() => moveUp(index)} style={styles.actionButton} disabled={index === 0}>
+              <Ionicons name="arrow-up" size={16} color={index === 0 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => moveDown(index)} style={styles.actionButton} disabled={index === activities.length - 1}>
+              <Ionicons name="arrow-down" size={16} color={index === activities.length - 1 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDelete(item, index)} style={styles.actionButton}>
+              <Ionicons name="trash-outline" size={16} color={shadcn.colors.destructive} />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -125,10 +137,11 @@ export default function EditThingsScreen() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
+      <DragList
         data={activities}
-        keyExtractor={item => item.id}
-        renderItem={renderActivityItem}
+        keyExtractor={(item: Activity) => item.id}
+        onReordered={onReordered}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
@@ -148,41 +161,72 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 12
+    paddingBottom: 12,
   },
   headerLeft: {
     width: 60,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerRight: {
     width: 60,
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   headerTitle: {
     color: shadcn.colors.foreground,
     fontSize: 18,
-    fontWeight: "600"
+    fontWeight: "600",
   },
-  listContent: { paddingHorizontal: 16, paddingBottom: 80, paddingTop: 8, marginTop: 20 },
-  activityRowWrapper: { marginBottom: 6 },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 80,
+    paddingTop: 3,
+    marginTop: 20,
+  },
+  activityRowWrapper: {
+    marginBottom: 8,
+  },
+  draggingActive: {
+    opacity: 0.8,
+    zIndex: 999,
+  },
   activityRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: shadcn.colors.card,
     borderRadius: shadcn.radius.lg,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 5,
   },
-  dragHandle: { marginRight: 15, marginLeft: 5 },
-  colorIndicator: { width: 10, height: 25, borderRadius: 10, marginRight: 20 },
-  activityIcon: { marginRight: 8 },
-  activityName: { flex: 1, color: shadcn.colors.foreground, fontSize: 15 },
-  rowActions: { flexDirection: "row", gap: 6 },
-  actionButton: { padding: 2 },
+  dragHandle: {
+    marginRight: 15,
+    marginLeft: 5,
+    padding: 4,
+  },
+  colorIndicator: {
+    width: 10,
+    height: 25,
+    borderRadius: 10,
+    marginRight: 20,
+  },
+  activityIcon: {
+    marginRight: 8,
+  },
+  activityName: {
+    flex: 1,
+    color: shadcn.colors.foreground,
+    fontSize: 15,
+  },
+  rowActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionButton: {
+    padding: 4,
+  },
   addButton: {
     position: "absolute",
     bottom: 20,
@@ -193,19 +237,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   addButtonText: {
-    color: '#888',
+    color: "#888",
     fontSize: 16,
-    fontWeight: '500'
+    fontWeight: "500",
   },
   doneButtonContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
   },
   doneButton: {
-    color: '#000',
+    color: "#000",
     fontSize: 13,
-    fontWeight: '600'
+    fontWeight: "600",
   },
 });

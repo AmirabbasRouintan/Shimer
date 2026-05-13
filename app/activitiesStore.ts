@@ -37,6 +37,11 @@ export interface Goal {
   remainingSeconds: number | null;
 }
 
+export interface Folder {
+  name: string;
+  items: string[]; // Array of activity IDs or names
+}
+
 // Default activities
 const defaultActivities: Activity[] = [
   { id: "5", name: "Work", icon: "briefcase-outline", color: "#96CEB4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
@@ -47,6 +52,12 @@ const defaultActivities: Activity[] = [
   { id: "10", name: "Getting ready", icon: "bed-outline", color: "#FF9F4A", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
   { id: "11", name: "Sleep/Rest", icon: "bed-outline", color: "#E8635E", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
   { id: "12", name: "Other", icon: "folder-outline", color: "#6C5CE7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] }
+];
+
+// Default folders
+const defaultFolders: Folder[] = [
+  { name: "Today", items: [] },
+  { name: "Tomorrow", items: [] }
 ];
 
 // Default goals
@@ -71,20 +82,21 @@ const defaultGoals: Goal[] = GOAL_TITLES.map((title, index) => ({
   remainingSeconds: null,
 }));
 
-// Global in‑memory store
 let globalActivities: Activity[] = [...defaultActivities];
 let globalChecklists: Checklist[] = [];
 let globalGoals: Goal[] = [...defaultGoals];
+let globalFolders: Folder[] = [...defaultFolders];
 let selectedChecklistIndex: number = 0;
 let showChecklistOnHome: boolean = false;
+let globalDayStart: string = "00:00";
+let globalDailyPlan: any = null;
+let globalPlanCompletedItems: Record<string, boolean> = {};
 
 type Listener = () => void;
 const listeners: Listener[] = [];
 
-// File path for persistence
 const STORAGE_FILE = FileSystem.documentDirectory + 'shimer_data.json';
 
-// Load data from file on app start
 async function loadFromFile() {
   try {
     const fileInfo = await FileSystem.getInfoAsync(STORAGE_FILE);
@@ -94,8 +106,12 @@ async function loadFromFile() {
       if (data.activities) globalActivities = data.activities;
       if (data.checklists) globalChecklists = data.checklists;
       if (data.goals) globalGoals = data.goals;
+      if (data.folders) globalFolders = data.folders;
       if (data.selectedChecklistIndex !== undefined) selectedChecklistIndex = data.selectedChecklistIndex;
       if (data.showChecklistOnHome !== undefined) showChecklistOnHome = data.showChecklistOnHome;
+      if (data.dayStart !== undefined) globalDayStart = data.dayStart;
+      if (data.dailyPlan !== undefined) globalDailyPlan = data.dailyPlan;
+      if (data.planCompletedItems !== undefined) globalPlanCompletedItems = data.planCompletedItems;
     }
   } catch (error) {
     console.warn('Failed to load data from file', error);
@@ -103,15 +119,18 @@ async function loadFromFile() {
   listeners.forEach(listener => listener());
 }
 
-// Save current state to file
 async function saveToFile() {
   try {
     const data = {
       activities: globalActivities,
       checklists: globalChecklists,
       goals: globalGoals,
+      folders: globalFolders,
       selectedChecklistIndex,
-      showChecklistOnHome
+      showChecklistOnHome,
+      dayStart: globalDayStart,
+      dailyPlan: globalDailyPlan,
+      planCompletedItems: globalPlanCompletedItems,
     };
     await FileSystem.writeAsStringAsync(STORAGE_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
@@ -188,6 +207,33 @@ export function deleteGoal(id: number) {
   notifyAndSave();
 }
 
+// ========== Folder Functions ==========
+export function getFolders(): Folder[] {
+  return globalFolders.map(f => ({ ...f, items: [...f.items] }));
+}
+
+export function setFolders(newFolders: Folder[]) {
+  globalFolders = newFolders.map(f => ({ ...f, items: [...f.items] }));
+  notifyAndSave();
+}
+
+export function addFolder(folder: Folder) {
+  globalFolders = [...globalFolders, { ...folder, items: [...folder.items] }];
+  notifyAndSave();
+}
+
+export function updateFolder(index: number, folder: Folder) {
+  const updated = [...globalFolders];
+  updated[index] = { ...folder, items: [...folder.items] };
+  globalFolders = updated;
+  notifyAndSave();
+}
+
+export function deleteFolder(index: number) {
+  globalFolders = globalFolders.filter((_, i) => i !== index);
+  notifyAndSave();
+}
+
 // ========== Checklist Selection ==========
 export function getSelectedChecklistIndex(): number {
   return selectedChecklistIndex;
@@ -205,6 +251,40 @@ export function getShowChecklistOnHome(): boolean {
 
 export function setShowChecklistOnHome(value: boolean) {
   showChecklistOnHome = value;
+  notifyAndSave();
+}
+
+// ========== Day Start Settings ==========
+export function getDayStart(): string {
+  return globalDayStart;
+}
+
+export function setDayStart(time: string) {
+  globalDayStart = time;
+  notifyAndSave();
+}
+
+// ========== Daily Plan Functions ==========
+export function getDailyPlan(): any {
+  return globalDailyPlan;
+}
+
+export function setDailyPlan(plan: any) {
+  globalDailyPlan = plan;
+  notifyAndSave();
+}
+
+export function getPlanCompletedItem(key: string): boolean {
+  return globalPlanCompletedItems[key] || false;
+}
+
+export function setPlanCompletedItem(key: string, value: boolean) {
+  globalPlanCompletedItems[key] = value;
+  notifyAndSave();
+}
+
+export function clearAllPlanCompletedItems() {
+  globalPlanCompletedItems = {};
   notifyAndSave();
 }
 

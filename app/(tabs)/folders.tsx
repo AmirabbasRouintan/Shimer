@@ -6,18 +6,23 @@ import {
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { shadcn } from "../../constants/components-theme";
-
-const store: Record<string, any> = {};
-const DEFAULT_FOLDERS = ['Today', 'Tomorrow'];
+import { getFolders, setFolders, subscribe, Folder } from '../activitiesStore';
 
 function SwipeableRow({ folder, index, onDelete, onEdit }: any) {
   const translateX = useRef(new Animated.Value(0)).current;
+
+  // Only create panResponder if folder is NOT "Today"
   const panResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 15,
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      if (folder.name === 'Today') return false; // Disable swipe for Today folder
+      return Math.abs(gesture.dx) > 15;
+    },
     onPanResponderMove: (_, gesture) => {
+      if (folder.name === 'Today') return;
       if (gesture.dx < 0) translateX.setValue(Math.max(gesture.dx, -80));
     },
     onPanResponderRelease: (_, gesture) => {
+      if (folder.name === 'Today') return;
       if (gesture.dx < -40) {
         Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
       } else {
@@ -26,13 +31,24 @@ function SwipeableRow({ folder, index, onDelete, onEdit }: any) {
     },
   });
 
+  // Don't show delete button for Today folder
+  const showDeleteButton = folder.name !== 'Today';
+
   return (
     <View style={styles.swipeContainer}>
-      <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(index)}>
-        <Ionicons name="trash-outline" size={20} color="#fff" />
-        <Text style={styles.deleteButtonText}>Delete</Text>
-      </TouchableOpacity>
-      <Animated.View style={[styles.folderRow, { transform: [{ translateX }] }]} {...panResponder.panHandlers}>
+      {showDeleteButton && (
+        <TouchableOpacity style={styles.deleteButton} onPress={() => onDelete(index)}>
+          <Ionicons name="trash-outline" size={20} color="#fff" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      )}
+      <Animated.View
+        style={[
+          styles.folderRow,
+          { transform: [{ translateX: folder.name === 'Today' ? 0 : translateX }] }
+        ]}
+        {...(folder.name !== 'Today' ? panResponder.panHandlers : {})}
+      >
         <Ionicons name="folder-outline" size={20} color={shadcn.colors.mutedForeground} />
         <TouchableOpacity style={styles.folderContent} onPress={() => onEdit(index)}>
           <Text style={styles.folderText}>{folder.name}</Text>
@@ -46,7 +62,7 @@ function SwipeableRow({ folder, index, onDelete, onEdit }: any) {
 
 export default function FoldersScreen() {
   const router = useRouter();
-  const [folders, setFolders] = useState<any[]>([]);
+  const [folders, setFoldersState] = useState<Folder[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [newFolder, setNewFolder] = useState('');
@@ -54,19 +70,19 @@ export default function FoldersScreen() {
   const [editName, setEditName] = useState('');
 
   useEffect(() => {
-    const saved = store['folders'];
-    if (saved) {
-      setFolders(JSON.parse(saved));
-    } else {
-      const defaults = DEFAULT_FOLDERS.map(name => ({ name, items: [] }));
-      setFolders(defaults);
-      store['folders'] = JSON.stringify(defaults);
-    }
+    // Load folders from store
+    setFoldersState(getFolders());
+
+    // Subscribe to store changes
+    const unsubscribe = subscribe(() => {
+      setFoldersState(getFolders());
+    });
+
+    return unsubscribe;
   }, []);
 
-  const saveFolders = (updated: any[]) => {
+  const saveFolders = (updated: Folder[]) => {
     setFolders(updated);
-    store['folders'] = JSON.stringify(updated);
   };
 
   const addFolder = () => {
@@ -114,12 +130,14 @@ export default function FoldersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/settings')}>
-          <Ionicons name="arrow-back" size={22} color={shadcn.colors.foreground} />
+        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.headerLeft}>
+          <Ionicons name="arrow-back" size={25} color={shadcn.colors.foreground} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Folders</Text>
-        <TouchableOpacity onPress={() => setShowNewModal(true)}>
-          <Ionicons name="add" size={24} color={shadcn.colors.foreground} />
+        <TouchableOpacity onPress={() => setShowNewModal(true)} style={styles.headerRight}>
+          <View style={styles.addButtonHeader}>
+            <Text style={styles.addButtonHeaderText}>Add</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -131,7 +149,8 @@ export default function FoldersScreen() {
 
       <View style={styles.tipContainer}>
         <Text style={styles.tipText}>
-          Tap a folder to rename it. Swipe left to quickly delete. The "Today" folder cannot be removed.
+          <Text style={styles.boldText}>Tap</Text> a folder to rename it. Swipe
+          <Text style={styles.boldText}> left</Text> to quickly delete.
         </Text>
       </View>
 
@@ -199,19 +218,59 @@ export default function FoldersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: shadcn.colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    marginBottom: shadcn.spacing.lg,
   },
-  headerTitle: { color: shadcn.colors.foreground, fontSize: 18, fontWeight: '600' },
+  headerLeft: {
+    width: 70,
+  },
+  headerRight: {
+    width: 70,
+    alignItems: 'flex-end',
+  },
+  headerTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: 'center',
+    flex: 1,
+  },
+  addButtonHeader: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  addButtonHeaderText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   content: { flex: 1, paddingHorizontal: 16 },
   swipeContainer: { marginBottom: 8, position: 'relative' },
   deleteButton: {
-    position: 'absolute', right: 0, top: 0, bottom: 0, width: 70,
-    backgroundColor: shadcn.colors.destructive, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
+    position: 'absolute',
+    right: 1,
+    top: 0,
+    bottom: 0,
+    width: 60,
+    backgroundColor: '#FF453A',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.85,
   },
-  deleteButtonText: { color: '#fff', fontSize: 11, marginTop: 2, fontWeight: '600' },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 10,
+    marginTop: 2,
+    fontWeight: '500',
+  },
   folderRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: shadcn.colors.card,
     paddingVertical: 14, paddingHorizontal: 14, borderRadius: 12, gap: 12, zIndex: 1,
@@ -233,5 +292,14 @@ const styles = StyleSheet.create({
   editDeleteButton: { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 'auto' },
   editDeleteText: { color: shadcn.colors.destructive, fontSize: 16, fontWeight: '600' },
   tipContainer: { margin: 20, paddingHorizontal: 8 },
-  tipText: { color: shadcn.colors.mutedForeground, fontSize: 13, textAlign: "center", lineHeight: 18 },
+  tipText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18
+  },
+  boldText: {
+    fontWeight: "bold",
+    color: shadcn.colors.foreground,
+  },
 });

@@ -495,15 +495,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600"
   },
-  list: { flex: 1, paddingHorizontal: 16, marginTop: 20, },
+  list: { flex: 1, paddingHorizontal: 16, marginTop: 23, },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    paddingVertical: 7,
     paddingHorizontal: 5,
     backgroundColor: shadcn.colors.card,
     borderRadius: shadcn.radius.lg,
-    marginBottom: 6
+    marginBottom: 8
   },
   colorIndicator: { width: 10, height: 25, borderRadius: 10, marginRight: 20 },
   rowIcon: { marginRight: 8 },

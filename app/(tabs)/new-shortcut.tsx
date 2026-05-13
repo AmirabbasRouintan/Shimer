@@ -45,8 +45,11 @@ export default function NewShortcutScreen() {
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Shortcut</Text>
-        <TouchableOpacity onPress={() => router.push("/settings")}>
-          <Text style={styles.doneText}>Add</Text>
+        <TouchableOpacity
+          style={styles.addButtonContainer}
+          onPress={() => router.push("/settings")}
+        >
+          <Text style={styles.addText}>Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -91,10 +94,7 @@ export default function NewShortcutScreen() {
         ))}
       </ScrollView>
 
-      <Text style={styles.note}>
-        Full app list requires device permissions. Grant access in Settings →
-        Shortcuts → App Access.
-      </Text>
+
     </View>
   );
 }
@@ -115,7 +115,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  doneText: { color: shadcn.colors.brand, fontSize: 16, fontWeight: "600" },
+  addButtonContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  addText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",

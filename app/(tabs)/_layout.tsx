@@ -6,6 +6,14 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+// Helper function to determine battery color
+const getBatteryColor = (level: number, isCharging: boolean): string => {
+  if (isCharging) return '#4CAF50'; // Green when charging
+  if (level <= 10) return '#FF4444'; // Red - critical
+  if (level <= 20) return '#FF9F4A'; // Orange - warning
+  return '#888'; // Default gray
+};
+
 function LiveClock() {
   const [time, setTime] = useState(new Date());
   const [batteryLevel, setBatteryLevel] = useState(86);
@@ -41,12 +49,20 @@ function LiveClock() {
   const day = time.getDate();
   const dateString = `${dayName} ${month} ${day}`;
 
+  const batteryColor = getBatteryColor(batteryLevel, isCharging);
+
   return (
     <View style={styles.clockContainer}>
       <Text style={styles.clockText}>{hours}:{minutes}</Text>
       <View style={styles.dateRow}>
-        <Text style={styles.batteryText}>{batteryLevel}%</Text>
-        <Ionicons name="flash" size={12} color={isCharging ? '#4CAF50' : '#888'} />
+        <Text style={[styles.batteryText, { color: batteryColor }]}>
+          {batteryLevel}%
+        </Text>
+        <Ionicons
+          name="flash"
+          size={12}
+          color={isCharging ? '#4CAF50' : batteryColor}
+        />
         <Text style={styles.dateText}>{dateString}</Text>
       </View>
     </View>
@@ -148,35 +164,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clockButton: {
-    paddingVertical: 4,      // was 12
-    paddingHorizontal: 10,   // was 20
-    marginVertical: 0,       // was -12
-    marginHorizontal: 0,     // was -10
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginVertical: 0,
+    marginHorizontal: 0,
   },
   clockContainer: {
-    paddingHorizontal: 12,   // was 20
-    paddingVertical: 4,      // was 8
-    borderRadius: 16,        // was 20
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   clockText: {
     color: '#fff',
-    fontSize: 20,            // was 22
+    fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
   },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,                  // was 4
-    marginTop: 1,            // was 2
+    gap: 3,
+    marginTop: 1,
   },
   dateText: {
     color: '#888',
-    fontSize: 10,            // was 11
+    fontSize: 10,
     textAlign: 'center',
   },
   batteryText: {
-    color: '#888',
-    fontSize: 10,            // was 11
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

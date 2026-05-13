@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   FlatList,
+  Keyboard,
   Modal,
   ScrollView,
   StyleSheet,
@@ -65,7 +66,10 @@ export default function NewChecklistScreen() {
     const newItems = [...items, ""];
     setItems(newItems);
     setTimeout(() => {
-      inputRefs.current[newItems.length - 1]?.focus();
+      const newIndex = newItems.length - 1;
+      if (inputRefs.current[newIndex]) {
+        inputRefs.current[newIndex].focus();
+      }
     }, 100);
   };
 
@@ -78,19 +82,28 @@ export default function NewChecklistScreen() {
   const removeItem = (index: number) => {
     const newItems = items.filter((_, i) => i !== index);
     setItems(newItems);
+    inputRefs.current = inputRefs.current.filter((_, i) => i !== index);
   };
 
   const handleBlur = (index: number) => {
-    if (items[index]?.trim() === "") {
+    if (items[index]?.trim() === "" && items.length > 1) {
       removeItem(index);
+    } else if (items[index]?.trim() === "" && items.length === 1) {
+      updateItem("", index);
+    }
+  };
+
+  const handleSubmitEditing = (index: number) => {
+    if (items[index]?.trim() !== "") {
+      addItem();
     }
   };
 
   const handleSave = () => {
     if (title.trim()) {
-      // Convert items from strings to objects with text and completed: false
-      const checklistItems = items
-        .filter(text => text.trim() !== "")
+      const nonEmptyItems = items.filter(text => text.trim() !== "");
+
+      const checklistItems = nonEmptyItems
         .map(text => ({ text: text.trim(), completed: false }));
 
       addChecklist({
@@ -99,6 +112,16 @@ export default function NewChecklistScreen() {
         items: checklistItems,
       });
       router.push("/settings");
+    } else {
+      alert("Please enter a checklist title");
+    }
+  };
+
+  const cleanupEmptyItems = () => {
+    const nonEmptyItems = items.filter(text => text.trim() !== "");
+    if (nonEmptyItems.length !== items.length) {
+      setItems(nonEmptyItems);
+      inputRefs.current = inputRefs.current.slice(0, nonEmptyItems.length);
     }
   };
 
@@ -116,7 +139,11 @@ export default function NewChecklistScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        keyboardShouldPersistTaps="handled"
+        onTouchEnd={cleanupEmptyItems}
+      >
         <View style={styles.titleRow}>
           <TouchableOpacity
             style={styles.iconButton}
@@ -135,6 +162,14 @@ export default function NewChecklistScreen() {
             value={title}
             onChangeText={setTitle}
             autoFocus
+            returnKeyType="next"
+            onSubmitEditing={() => {
+              if (items.length > 0 && inputRefs.current[0]) {
+                inputRefs.current[0].focus();
+              } else {
+                addItem();
+              }
+            }}
           />
         </View>
 
@@ -152,18 +187,22 @@ export default function NewChecklistScreen() {
                 if (ref) inputRefs.current[index] = ref;
               }}
               style={styles.itemInput}
-              placeholder="Item"
+              placeholder={`Item ${index + 1}`}
               placeholderTextColor={shadcn.colors.mutedForeground}
               value={item}
               onChangeText={(text) => updateItem(text, index)}
               onBlur={() => handleBlur(index)}
+              onSubmitEditing={() => handleSubmitEditing(index)}
+              returnKeyType={index === items.length - 1 ? "done" : "next"}
+              blurOnSubmit={false}
             />
-            <TouchableOpacity onPress={() => removeItem(index)}>
-              <Ionicons
-                name="close-circle"
-                size={20}
-                color={shadcn.colors.mutedForeground}
-              />
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => removeItem(index)}
+            >
+              <View style={styles.removeButtonCircle}>
+                <Text style={styles.removeButtonText}>-</Text>
+              </View>
             </TouchableOpacity>
           </View>
         ))}
@@ -179,16 +218,19 @@ export default function NewChecklistScreen() {
       </TouchableOpacity>
 
       <Modal visible={showIcons} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowIcons(false)}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose Icon</Text>
-              <TouchableOpacity onPress={() => setShowIcons(false)}>
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={shadcn.colors.foreground}
-                />
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowIcons(false)}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
               </TouchableOpacity>
             </View>
             <FlatList
@@ -219,7 +261,7 @@ export default function NewChecklistScreen() {
               )}
             />
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -261,18 +303,19 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     backgroundColor: shadcn.colors.card,
-    width: 52,
-    height: 52,
+    width: 50,
+    height: "auto",
+    padding: 6,
     borderRadius: shadcn.radius.lg,
     justifyContent: "center",
     alignItems: "center",
   },
   titleInput: {
     color: shadcn.colors.foreground,
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "500",
     backgroundColor: shadcn.colors.card,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: shadcn.radius.md,
     flex: 1,
@@ -285,6 +328,23 @@ const styles = StyleSheet.create({
   },
   checkbox: {},
   itemInput: { color: shadcn.colors.foreground, fontSize: 16, flex: 1 },
+  removeButton: {
+    padding: 2,
+  },
+  removeButtonCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 12,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeButtonText: {
+    color: '#fff',
+    fontSize: 26,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   bottomAddButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -326,4 +386,15 @@ const styles = StyleSheet.create({
     backgroundColor: shadcn.colors.secondary,
   },
   iconItemSelected: { backgroundColor: shadcn.colors.accent },
+  closeButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  closeButtonText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
