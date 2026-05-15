@@ -1,5 +1,5 @@
 // components/JSONPlanner.tsx
-import { getDailyPlan, setDailyPlan, getPlanCompletedItem, setPlanCompletedItem, subscribe } from '../app/activitiesStore.ts';
+import { getPlanCompletedItem, setPlanCompletedItem } from '../app/activitiesStore';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
@@ -96,6 +96,13 @@ interface DailyPlan {
   schedule: ScheduleItem[];
   categories: Record<string, string>;
   notes: Record<string, string>;
+}
+
+interface JSONPlannerProps {
+  selectedDate?: Date;
+  initialPlan?: DailyPlan | null;
+  onSave?: (plan: DailyPlan) => void;
+  onClose?: () => void;
 }
 
 const exampleJSON = `{
@@ -195,14 +202,16 @@ const exampleJSON = `{
 }`;
 
 // ---------- Main Component ----------
-export default function JSONPlanner() {
-  const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
+export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose }: JSONPlannerProps = {}) {
+  const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(initialPlan || null);
   const [jsonInput, setJsonInput] = useState('');
   const [plannerError, setPlannerError] = useState('');
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [checklistItems, setChecklistItems] = useState<{ text: string, completed: boolean }[]>([]);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<DailyPlan | null>(null);
 
   // Live time tracking
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -212,50 +221,44 @@ export default function JSONPlanner() {
   const scrollViewRef = useRef<ScrollView>(null);
   const itemRefs = useRef<(View | null)[]>([]);
 
-  // Load saved plan from store
+  // Helper to get storage keys with date
+  const getStorageKey = (prefix: string, index: number): string => {
+    const dateStr = selectedDate ? selectedDate.toISOString().split('T')[0] : 'default';
+    return `${dateStr}_${prefix}_${index}`;
+  };
+
+  // Load saved plan from props
   useEffect(() => {
-    const savedPlan = getDailyPlan();
-    if (savedPlan) {
+    if (initialPlan) {
       try {
-        setDailyPlan(savedPlan);
-        const initializedSchedule = (savedPlan.schedule || []).map((item: ScheduleItem, idx: number) => ({
+        setDailyPlan(initialPlan);
+        setEditData(JSON.parse(JSON.stringify(initialPlan)));
+        const initializedSchedule = (initialPlan.schedule || []).map((item: ScheduleItem, idx: number) => ({
           ...item,
-          completed: getPlanCompletedItem(`plan_completed_${idx}`),
+          completed: getPlanCompletedItem(getStorageKey('plan_completed', idx)),
         }));
         setScheduleItems(initializedSchedule);
-        const initializedChecklist = (savedPlan.checklist || []).map((text: string, idx: number) => ({
+        const initializedChecklist = (initialPlan.checklist || []).map((text: string, idx: number) => ({
           text,
-          completed: getPlanCompletedItem(`checklist_completed_${idx}`),
+          completed: getPlanCompletedItem(getStorageKey('checklist_completed', idx)),
         }));
         setChecklistItems(initializedChecklist);
-      } catch (e) { }
+      } catch (e) {
+        console.warn('Failed to load plan', e);
+      }
     }
+  }, [initialPlan]);
 
-    // Subscribe to store changes
-    const unsubscribe = subscribe(() => {
-      const updatedPlan = getDailyPlan();
-      if (updatedPlan) setDailyPlan(updatedPlan);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  // Persist changes to store
-  useEffect(() => {
-    if (dailyPlan) {
-      setDailyPlan(dailyPlan);
-    }
-  }, [dailyPlan]);
-
+  // Save completed items to storage
   useEffect(() => {
     scheduleItems.forEach((item, idx) => {
-      setPlanCompletedItem(`plan_completed_${idx}`, item.completed);
+      setPlanCompletedItem(getStorageKey('plan_completed', idx), item.completed || false);
     });
   }, [scheduleItems]);
 
   useEffect(() => {
     checklistItems.forEach((item, idx) => {
-      setPlanCompletedItem(`checklist_completed_${idx}`, item.completed);
+      setPlanCompletedItem(getStorageKey('checklist_completed', idx), item.completed);
     });
   }, [checklistItems]);
 
@@ -327,19 +330,41 @@ export default function JSONPlanner() {
         return;
       }
       setDailyPlan(parsed);
+      setEditData(JSON.parse(JSON.stringify(parsed)));
       setScheduleItems((parsed.schedule || []).map((item: ScheduleItem) => ({ ...item, completed: false })));
       setChecklistItems((parsed.checklist || []).map((text: string) => ({ text, completed: false })));
       setPlannerError('');
       setJsonInput('');
-      Alert.alert('Success', 'Your daily plan has been loaded!');
+      setIsEditing(false);
+
+      if (onSave) {
+        onSave(parsed);
+      }
+
+      Alert.alert('Success', 'Your daily plan has been saved!');
     } catch (error: any) {
       setPlannerError('Invalid JSON format: ' + error.message);
     }
   };
 
+  const handleSaveEdit = () => {
+    if (editData) {
+      setDailyPlan(editData);
+      setScheduleItems((editData.schedule || []).map((item: ScheduleItem) => ({ ...item, completed: false })));
+      setChecklistItems((editData.checklist || []).map((text: string) => ({ text, completed: false })));
+      setIsEditing(false);
+
+      if (onSave) {
+        onSave(editData);
+      }
+
+      Alert.alert('Success', 'Your plan has been updated!');
+    }
+  };
+
   const clearPlan = () => {
     Alert.alert(
-      'Delete Plan',
+      'Delete',
       'Are you sure you want to delete your daily plan?',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -349,12 +374,9 @@ export default function JSONPlanner() {
             setDailyPlan(null);
             setScheduleItems([]);
             setChecklistItems([]);
-            setDailyPlan(null); // This will clear from store
             setCurrentBlockIndex(null);
-            // Clear completed items from storage
-            for (let i = 0; i < 100; i++) {
-              setPlanCompletedItem(`plan_completed_${i}`, false);
-              setPlanCompletedItem(`checklist_completed_${i}`, false);
+            if (onSave) {
+              onSave(null as any);
             }
           }
         }
@@ -405,6 +427,230 @@ export default function JSONPlanner() {
     outputRange: ['0%', '100%'],
   });
 
+  // Update editData when dailyPlan changes
+  useEffect(() => {
+    if (dailyPlan && !isEditing) {
+      setEditData(JSON.parse(JSON.stringify(dailyPlan)));
+    }
+  }, [dailyPlan]);
+
+  // Render Edit Mode
+  const renderEditMode = () => {
+    if (!editData) return null;
+
+    return (
+      <ScrollView style={styles.editContainer}>
+        <View style={styles.editSection}>
+          <Text style={styles.editSectionTitle}>Basic Info</Text>
+          <TextInput
+            style={styles.editInput}
+            placeholder="Name"
+            placeholderTextColor="#555"
+            value={editData.name}
+            onChangeText={(text) => setEditData({ ...editData, name: text })}
+          />
+          <TextInput
+            style={styles.editInput}
+            placeholder="Motto"
+            placeholderTextColor="#555"
+            value={editData.motto}
+            onChangeText={(text) => setEditData({ ...editData, motto: text })}
+          />
+          <View style={styles.editRow}>
+            <TextInput
+              style={[styles.editInput, styles.editHalfInput]}
+              placeholder="Wake up (e.g., 8:00 AM)"
+              placeholderTextColor="#555"
+              value={editData.wake_up}
+              onChangeText={(text) => setEditData({ ...editData, wake_up: text })}
+            />
+            <TextInput
+              style={[styles.editInput, styles.editHalfInput]}
+              placeholder="Sleep target (e.g., 11:00 PM)"
+              placeholderTextColor="#555"
+              value={editData.sleep_target}
+              onChangeText={(text) => setEditData({ ...editData, sleep_target: text })}
+            />
+          </View>
+        </View>
+
+        <View style={styles.editSection}>
+          <Text style={styles.editSectionTitle}>Checklist</Text>
+          {editData.checklist.map((item, idx) => (
+            <View key={idx} style={styles.editChecklistRow}>
+              <TextInput
+                style={styles.editChecklistInput}
+                value={item}
+                onChangeText={(text) => {
+                  const newChecklist = [...editData.checklist];
+                  newChecklist[idx] = text;
+                  setEditData({ ...editData, checklist: newChecklist });
+                }}
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  const newChecklist = editData.checklist.filter((_, i) => i !== idx);
+                  setEditData({ ...editData, checklist: newChecklist });
+                }}
+              >
+                <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setEditData({ ...editData, checklist: [...editData.checklist, ''] })}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={styles.addButtonText}>Add Checklist Item</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.editSection}>
+          <Text style={styles.editSectionTitle}>Schedule</Text>
+          {editData.schedule.map((item, idx) => (
+            <View key={idx} style={styles.editScheduleCard}>
+              <View style={styles.editScheduleHeader}>
+                <TextInput
+                  style={styles.editScheduleTime}
+                  placeholder="Time (e.g., 9:00 AM)"
+                  placeholderTextColor="#555"
+                  value={item.time}
+                  onChangeText={(text) => {
+                    const newSchedule = [...editData.schedule];
+                    newSchedule[idx] = { ...newSchedule[idx], time: text };
+                    setEditData({ ...editData, schedule: newSchedule });
+                  }}
+                />
+                <TextInput
+                  style={styles.editScheduleEmoji}
+                  placeholder="Emoji"
+                  placeholderTextColor="#555"
+                  value={item.emoji}
+                  onChangeText={(text) => {
+                    const newSchedule = [...editData.schedule];
+                    newSchedule[idx] = { ...newSchedule[idx], emoji: text };
+                    setEditData({ ...editData, schedule: newSchedule });
+                  }}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    const newSchedule = editData.schedule.filter((_, i) => i !== idx);
+                    setEditData({ ...editData, schedule: newSchedule });
+                  }}
+                >
+                  <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.editScheduleActivity}
+                placeholder="Activity"
+                placeholderTextColor="#555"
+                value={item.activity}
+                onChangeText={(text) => {
+                  const newSchedule = [...editData.schedule];
+                  newSchedule[idx] = { ...newSchedule[idx], activity: text };
+                  setEditData({ ...editData, schedule: newSchedule });
+                }}
+              />
+              <TextInput
+                style={styles.editScheduleDetails}
+                placeholder="Details"
+                placeholderTextColor="#555"
+                value={item.details}
+                multiline
+                onChangeText={(text) => {
+                  const newSchedule = [...editData.schedule];
+                  newSchedule[idx] = { ...newSchedule[idx], details: text };
+                  setEditData({ ...editData, schedule: newSchedule });
+                }}
+              />
+              <TextInput
+                style={styles.editScheduleCategory}
+                placeholder="Category"
+                placeholderTextColor="#555"
+                value={item.category}
+                onChangeText={(text) => {
+                  const newSchedule = [...editData.schedule];
+                  newSchedule[idx] = { ...newSchedule[idx], category: text };
+                  setEditData({ ...editData, schedule: newSchedule });
+                }}
+              />
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setEditData({
+              ...editData,
+              schedule: [...editData.schedule, { time: '', emoji: '📌', activity: '', details: '', category: 'other', options: [] }]
+            })}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={styles.addButtonText}>Add Schedule Item</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.editSection}>
+          <Text style={styles.editSectionTitle}>Notes</Text>
+          {Object.entries(editData.notes).map(([key, value], idx) => (
+            <View key={idx} style={styles.editNoteRow}>
+              <TextInput
+                style={styles.editNoteKey}
+                placeholder="Key"
+                placeholderTextColor="#555"
+                value={key}
+                onChangeText={(text) => {
+                  const newNotes = { ...editData.notes };
+                  delete newNotes[key];
+                  newNotes[text] = value;
+                  setEditData({ ...editData, notes: newNotes });
+                }}
+              />
+              <TextInput
+                style={styles.editNoteValue}
+                placeholder="Value"
+                placeholderTextColor="#555"
+                value={value}
+                onChangeText={(text) => {
+                  const newNotes = { ...editData.notes };
+                  newNotes[key] = text;
+                  setEditData({ ...editData, notes: newNotes });
+                }}
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  const newNotes = { ...editData.notes };
+                  delete newNotes[key];
+                  setEditData({ ...editData, notes: newNotes });
+                }}
+              >
+                <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setEditData({ ...editData, notes: { ...editData.notes, 'new_note': '' } })}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={styles.addButtonText}>Add Note</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.editActions}>
+          <TouchableOpacity style={styles.cancelEditButton} onPress={() => setIsEditing(false)}>
+            <Text style={styles.cancelEditText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.saveEditButton} onPress={handleSaveEdit}>
+            <Text style={styles.saveEditText}>Save Changes</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  };
+
   // Render Help Modal
   const renderHelpModal = () => (
     <Modal visible={showHelpModal} transparent animationType="slide">
@@ -428,6 +674,10 @@ export default function JSONPlanner() {
             <View style={styles.helpSection}>
               <Text style={styles.helpSectionTitle}>📊 View Progress</Text>
               <Text style={styles.helpText}>Tap the chart button to see daily progress in a donut chart.</Text>
+            </View>
+            <View style={styles.helpSection}>
+              <Text style={styles.helpSectionTitle}>✏️ Edit Plan</Text>
+              <Text style={styles.helpText}>Tap the edit button to modify name, motto, schedule, checklist, and notes.</Text>
             </View>
             <View style={styles.helpSection}>
               <Text style={styles.helpSectionTitle}>🤖 AI Prompt</Text>
@@ -467,7 +717,7 @@ export default function JSONPlanner() {
               <View style={styles.donutContainer}>
                 <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
                   <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#1a1a1a" strokeWidth={strokeWidth} fill="none" />
-                  <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#4ECDC4" strokeWidth={strokeWidth} fill="none"
+                  <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#fff" strokeWidth={strokeWidth} fill="none"
                     strokeDasharray={circumference} strokeDashoffset={progressOffset} strokeLinecap="round"
                     transform={`rotate(-90, ${size / 2}, ${size / 2})`} />
                   <G>
@@ -479,13 +729,13 @@ export default function JSONPlanner() {
                 </Svg>
               </View>
               <View style={styles.statsGrid}>
-                <View style={styles.statCard}><Ionicons name="checkbox-outline" size={24} color="#4ECDC4" /><Text style={styles.statNumber}>{statsLocal.completed}/{statsLocal.total}</Text><Text style={styles.statLabel}>Total Tasks</Text></View>
+                <View style={styles.statCard}><Ionicons name="checkbox-outline" size={24} color="#fff" /><Text style={styles.statNumber}>{statsLocal.completed}/{statsLocal.total}</Text><Text style={styles.statLabel}>Total Tasks</Text></View>
                 <View style={styles.statCard}><Ionicons name="time-outline" size={24} color="#FF9F4A" /><Text style={styles.statNumber}>{statsLocal.scheduleCompleted}/{statsLocal.scheduleTotal}</Text><Text style={styles.statLabel}>Schedule</Text></View>
                 <View style={styles.statCard}><Ionicons name="list-outline" size={24} color="#DDA0DD" /><Text style={styles.statNumber}>{statsLocal.checklistCompleted}/{statsLocal.checklistTotal}</Text><Text style={styles.statLabel}>Checklist</Text></View>
               </View>
               {statsLocal.percentage === 100 && <View style={styles.achievementBox}><Ionicons name="trophy" size={32} color="#FFD700" /><Text style={styles.achievementText}>Perfect Day! 🎉</Text><Text style={styles.achievementSubtext}>You completed everything!</Text></View>}
               {statsLocal.percentage >= 70 && statsLocal.percentage < 100 && <View style={styles.greatBox}><Ionicons name="star" size={28} color="#FFEAA7" /><Text style={styles.greatText}>Great Progress! 🌟</Text><Text style={styles.greatSubtext}>You're doing awesome today!</Text></View>}
-              {statsLocal.percentage < 30 && statsLocal.total > 0 && <View style={styles.encourageBox}><Ionicons name="rocket" size={28} color="#4ECDC4" /><Text style={styles.encourageText}>You've got this! 💪</Text><Text style={styles.encourageSubtext}>Start checking off your tasks</Text></View>}
+              {statsLocal.percentage < 30 && statsLocal.total > 0 && <View style={styles.encourageBox}><Ionicons name="rocket" size={28} color="#fff" /><Text style={styles.encourageText}>You've got this! 💪</Text><Text style={styles.encourageSubtext}>Start checking off your tasks</Text></View>}
               <TouchableOpacity style={styles.closeSummaryButton} onPress={() => setShowSummaryModal(false)}><Text style={styles.closeSummaryText}>Continue Your Day</Text></TouchableOpacity>
             </ScrollView>
           </View>
@@ -509,8 +759,9 @@ export default function JSONPlanner() {
           </View>
           <Text style={styles.currentTimeText}>{timeString}</Text>
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={scrollToCurrentBlock}><Ionicons name="locate" size={20} color="#4ECDC4" /></TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSummaryModal(true)}><Ionicons name="stats-chart" size={20} color="#4ECDC4" /></TouchableOpacity>
+            <TouchableOpacity onPress={scrollToCurrentBlock}><Ionicons name="locate" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowSummaryModal(true)}><Ionicons name="stats-chart" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setIsEditing(true)}><Ionicons name="create-outline" size={20} color="#fff" /></TouchableOpacity>
           </View>
         </View>
 
@@ -520,12 +771,12 @@ export default function JSONPlanner() {
         </View>
 
         <View style={styles.planHeader}>
-          <View><Text style={styles.planDate}>{dailyPlan.date || 'Today'}</Text><Text style={styles.planName}>{dailyPlan.name || 'Your Day'}</Text></View>
+          <View><Text style={styles.planDate}>{dailyPlan.date || (selectedDate ? selectedDate.toLocaleDateString() : 'Today')}</Text><Text style={styles.planName}>{dailyPlan.name || 'Your Day'}</Text></View>
         </View>
         {dailyPlan.motto && <View style={styles.mottoBox}><Ionicons name="quote" size={16} color="#888" /><Text style={styles.mottoText}>{dailyPlan.motto}</Text></View>}
         <View style={styles.sleepRow}>
           <View style={styles.sleepItem}><Ionicons name="sunny-outline" size={16} color="#FF9F4A" /><Text style={styles.sleepLabel}>Wake</Text><Text style={styles.sleepValue}>{dailyPlan.wake_up || '—'}</Text></View>
-          <View style={styles.sleepItem}><Ionicons name="moon-outline" size={16} color="#4ECDC4" /><Text style={styles.sleepLabel}>Sleep</Text><Text style={styles.sleepValue}>{dailyPlan.sleep_target || '—'}</Text></View>
+          <View style={styles.sleepItem}><Ionicons name="moon-outline" size={16} color="#fff" /><Text style={styles.sleepLabel}>Sleep</Text><Text style={styles.sleepValue}>{dailyPlan.sleep_target || '—'}</Text></View>
         </View>
 
         <Text style={styles.scheduleTitle}>📋 Schedule</Text>
@@ -545,18 +796,18 @@ export default function JSONPlanner() {
                   <View style={styles.timeContainer}>
                     <Text style={[styles.timelineTime, isCurrent && styles.currentText, isStartingSoon && styles.startingSoonText, item.completed && styles.completedText]}>{item.time}</Text>
                     {isCurrent && timeRemaining && <View style={styles.timeRemainingBadge}><Ionicons name="timer-outline" size={10} color="#000" /><Text style={styles.timeRemainingText}>{timeRemaining}</Text></View>}
-                    {isStartingSoon && <View style={styles.startingSoonBadge}><Ionicons name="alert-circle" size={10} color="#FFEAA7" /><Text style={styles.startingSoonBadgeText}>Starting soon</Text></View>}
+                    {isStartingSoon && <View style={styles.startingSoonBadge}><Ionicons name="alert-circle" size={10} color="#000" /><Text style={styles.startingSoonBadgeText}>Starting soon</Text></View>}
                   </View>
                   <View style={styles.headerRight}>
                     <Text style={styles.timelineEmoji}>{item.emoji}</Text>
-                    <TouchableOpacity onPress={() => toggleScheduleComplete(idx)}><Ionicons name={item.completed ? 'checkbox' : 'square-outline'} size={22} color={item.completed ? '#4ECDC4' : '#555'} /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => toggleScheduleComplete(idx)}><Ionicons name={item.completed ? 'checkbox' : 'square-outline'} size={22} color={item.completed ? '#fff' : '#555'} /></TouchableOpacity>
                   </View>
                 </View>
                 <Text style={[styles.timelineActivity, isCurrent && styles.currentText, item.completed && styles.completedText]}>{item.activity}</Text>
                 <Text style={[styles.timelineDetails, isCurrent && styles.currentDetailsText, item.completed && styles.completedDetailsText]}>{item.details}</Text>
                 {item.options && item.options.length > 0 && <View style={styles.optionsContainer}>{item.options.map((opt, i) => <View key={i} style={styles.optionChip}><Text style={styles.optionText}>{opt}</Text></View>)}</View>}
                 <View style={styles.categoryChip}><Text style={styles.categoryChipText}>{dailyPlan.categories?.[item.category] || item.category}</Text></View>
-                {isCurrent && <View style={styles.currentIndicator}><Ionicons name="play-circle" size={14} color="#4ECDC4" /><Text style={styles.currentIndicatorText}>You should be doing this now</Text></View>}
+                {isCurrent && <View style={styles.currentIndicator}><Ionicons name="play-circle" size={14} color="#fff" /><Text style={styles.currentIndicatorText}>You should be doing this now</Text></View>}
               </View>
             </View>
           );
@@ -567,7 +818,7 @@ export default function JSONPlanner() {
             <Text style={styles.scheduleTitle}>✅ Checklist</Text>
             {checklistItems.map((item, idx) => (
               <View key={idx} style={styles.checklistItem}>
-                <TouchableOpacity onPress={() => toggleChecklistComplete(idx)}><Ionicons name={item.completed ? 'checkbox' : 'square-outline'} size={22} color={item.completed ? '#4ECDC4' : '#555'} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => toggleChecklistComplete(idx)}><Ionicons name={item.completed ? 'checkbox' : 'square-outline'} size={22} color={item.completed ? '#fff' : '#555'} /></TouchableOpacity>
                 <Text style={[styles.checklistText, item.completed && styles.completedChecklistText]}>{item.text}</Text>
               </View>
             ))}
@@ -583,8 +834,7 @@ export default function JSONPlanner() {
           </>
         )}
 
-        <TouchableOpacity style={styles.deletePlanButton} onPress={clearPlan}><Ionicons name="trash-outline" size={20} color="#FF6B6B" /><Text style={styles.deletePlanText}>Delete Plan</Text></TouchableOpacity>
-        <View style={{ height: 40 }} />
+        <View style={{ height: 60 }} />
       </View>
     );
   };
@@ -593,14 +843,13 @@ export default function JSONPlanner() {
   const renderJSONInputView = () => (
     <View style={styles.jsonContainer}>
       <View style={styles.jsonHeader}>
-        <View style={styles.jsonHeaderLeft}><Ionicons name="code-slash" size={24} color="#4ECDC4" /><Text style={styles.jsonTitle}>JSON Planner</Text></View>
+        <View style={styles.jsonHeaderLeft}><Ionicons name="code-slash" size={24} color="#fff" /><Text style={styles.jsonTitle}>JSON Planner</Text></View>
         <View style={styles.jsonHeaderButtons}>
-          <TouchableOpacity onPress={() => setShowHelpModal(true)}><Ionicons name="help-circle-outline" size={22} color="#4ECDC4" /></TouchableOpacity>
-          {dailyPlan && <TouchableOpacity style={styles.viewPlanButton} onPress={() => setDailyPlan(dailyPlan)}><Text style={styles.viewPlanText}>View Plan</Text></TouchableOpacity>}
+          <TouchableOpacity onPress={() => setShowHelpModal(true)}><Ionicons name="help-circle-outline" size={22} color="#fff" /></TouchableOpacity>
         </View>
       </View>
       <TouchableOpacity style={styles.helpBanner} onPress={() => setShowHelpModal(true)}><Ionicons name="bulb-outline" size={20} color="#FFEAA7" /><Text style={styles.helpBannerText}>Tap for help, AI prompts, and feature guide!</Text><Ionicons name="chevron-forward" size={16} color="#FFEAA7" /></TouchableOpacity>
-      <TouchableOpacity style={styles.exampleButton} onPress={copyExampleJSON}><Ionicons name="copy-outline" size={18} color="#4ECDC4" /><Text style={styles.exampleButtonText}>Load Example JSON</Text></TouchableOpacity>
+      <TouchableOpacity style={styles.exampleButton} onPress={copyExampleJSON}><Ionicons name="copy-outline" size={18} color="#fff" /><Text style={styles.exampleButtonText}>Load Example JSON</Text></TouchableOpacity>
       <TextInput style={styles.jsonInput} multiline placeholder='Paste your JSON plan here...' placeholderTextColor="#555" value={jsonInput} onChangeText={(text) => { setJsonInput(text); setPlannerError(''); }} textAlignVertical="top" />
       {plannerError ? <Text style={styles.errorText}>{plannerError}</Text> : null}
       <TouchableOpacity style={styles.convertButton} onPress={handleConvertJSON}><Ionicons name="sync-outline" size={20} color="#000" /><Text style={styles.convertButtonText}>Convert to Beautiful Plan</Text></TouchableOpacity>
@@ -610,15 +859,22 @@ export default function JSONPlanner() {
 
   return (
     <ScrollView ref={scrollViewRef} style={styles.scrollView} keyboardShouldPersistTaps="handled">
-      {dailyPlan ? renderDailyPlanView() : renderJSONInputView()}
+      {isEditing && dailyPlan ? renderEditMode() : (dailyPlan ? renderDailyPlanView() : renderJSONInputView())}
       {renderHelpModal()}
       {renderSummaryModal()}
+      {/* Delete Button - Bottom Left without background */}
+      {dailyPlan && !isEditing && (
+        <TouchableOpacity style={styles.deleteButton} onPress={clearPlan}>
+          <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: { flex: 1, paddingHorizontal: 20 },
+  scrollView: { flex: 1, paddingHorizontal: 20, paddingBottom: 20 },
   // JSON Planner Styles
   jsonContainer: { paddingVertical: 16 },
   jsonHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -627,13 +883,13 @@ const styles = StyleSheet.create({
   jsonHeaderButtons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   helpButton: { padding: 4 },
   viewPlanButton: { backgroundColor: '#1a1a1a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  viewPlanText: { color: '#4ECDC4', fontSize: 13 },
+  viewPlanText: { color: '#fff', fontSize: 13 },
   helpBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, marginBottom: 16, gap: 10, borderWidth: 1, borderColor: '#FFEAA730' },
   helpBannerText: { flex: 1, color: '#FFEAA7', fontSize: 13 },
-  exampleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a1a1a', paddingVertical: 10, borderRadius: 10, marginBottom: 16, borderWidth: 1, borderColor: '#4ECDC430' },
-  exampleButtonText: { color: '#4ECDC4', fontSize: 14, fontWeight: '500' },
+  exampleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a1a1a', paddingVertical: 10, borderRadius: 10, marginBottom: 16, borderWidth: 1, borderColor: '#fff30' },
+  exampleButtonText: { color: '#fff', fontSize: 14, fontWeight: '500' },
   jsonInput: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 12, padding: 16, color: '#fff', fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', minHeight: 200, maxHeight: 300 },
-  convertButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4ECDC4', paddingVertical: 14, borderRadius: 12, marginTop: 16 },
+  convertButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, marginTop: 16 },
   convertButtonText: { color: '#000', fontSize: 16, fontWeight: '700' },
   errorText: { color: '#FF6B6B', fontSize: 13, marginTop: 8 },
   jsonHint: { color: '#555', fontSize: 12, marginTop: 12, textAlign: 'center' },
@@ -644,11 +900,11 @@ const styles = StyleSheet.create({
   helpModalTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
   helpScroll: { padding: 20 },
   helpSection: { marginBottom: 24 },
-  helpSectionTitle: { color: '#4ECDC4', fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  helpSectionTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 12 },
   helpText: { color: '#999', fontSize: 14, lineHeight: 20, marginBottom: 12 },
-  promptBox: { backgroundColor: '#1a1a1a', padding: 14, borderRadius: 12, borderLeftWidth: 3, borderLeftColor: '#4ECDC4' },
+  promptBox: { backgroundColor: '#1a1a1a', padding: 14, borderRadius: 12, borderLeftWidth: 3, borderLeftColor: '#fff' },
   promptText: { color: '#fff', fontSize: 13, lineHeight: 18, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  closeHelpButton: { backgroundColor: '#4ECDC4', margin: 20, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  closeHelpButton: { backgroundColor: '#fff', margin: 20, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   closeHelpText: { color: '#000', fontSize: 16, fontWeight: '700' },
   summaryModalContent: { backgroundColor: '#0a0a0a', borderRadius: 20, width: '90%', maxHeight: '85%', borderWidth: 1, borderColor: '#1a1a1a' },
   summaryModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
@@ -665,13 +921,13 @@ const styles = StyleSheet.create({
   greatBox: { backgroundColor: '#1a2a1a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#FFEAA7', marginVertical: 10 },
   greatText: { color: '#FFEAA7', fontSize: 18, fontWeight: 'bold' },
   greatSubtext: { color: '#aaa', fontSize: 12 },
-  encourageBox: { backgroundColor: '#1a1a2a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#4ECDC4', marginVertical: 10 },
-  encourageText: { color: '#4ECDC4', fontSize: 18, fontWeight: 'bold' },
+  encourageBox: { backgroundColor: '#1a1a2a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#fff', marginVertical: 10 },
+  encourageText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   encourageSubtext: { color: '#aaa', fontSize: 12 },
-  closeSummaryButton: { backgroundColor: '#4ECDC4', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20 },
+  closeSummaryButton: { backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   closeSummaryText: { color: '#000', fontSize: 16, fontWeight: '700' },
   // Daily Plan Styles
-  planContainer: { paddingVertical: 16 },
+  planContainer: { paddingVertical: 16, paddingBottom: 80 },
   liveTimeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0a0a0a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#1a1a1a' },
   liveTimeIndicator: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pulsingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4444' },
@@ -680,12 +936,12 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 12 },
   progressBarContainer: { marginBottom: 16 },
   progressBarBg: { height: 6, backgroundColor: '#1a1a1a', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#4ECDC4', borderRadius: 3 },
+  progressBarFill: { height: '100%', backgroundColor: '#fff', borderRadius: 3 },
   progressText: { color: '#888', fontSize: 11, textAlign: 'right', marginTop: 4 },
   planHeader: { marginBottom: 16 },
   planDate: { color: '#888', fontSize: 14 },
   planName: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 4 },
-  mottoBox: { flexDirection: 'row', backgroundColor: '#0a0a0a', padding: 16, borderRadius: 12, gap: 10, marginBottom: 16, borderLeftWidth: 3, borderLeftColor: '#4ECDC4' },
+  mottoBox: { flexDirection: 'row', backgroundColor: '#0a0a0a', padding: 16, borderRadius: 12, gap: 10, marginBottom: 16, borderLeftWidth: 3, borderLeftColor: '#fff' },
   mottoText: { color: '#999', fontSize: 14, flex: 1, lineHeight: 20 },
   sleepRow: { flexDirection: 'row', gap: 16, marginBottom: 24 },
   sleepItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0a0a0a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, gap: 8 },
@@ -695,23 +951,23 @@ const styles = StyleSheet.create({
   timelineItem: { flexDirection: 'row', marginBottom: 16 },
   timelineLeft: { width: 30, alignItems: 'center' },
   timelineDot: { width: 12, height: 12, borderRadius: 6, marginTop: 4 },
-  currentDot: { width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: '#4ECDC4', backgroundColor: '#4ECDC4' },
+  currentDot: { width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: '#fff', backgroundColor: '#fff' },
   startingSoonDot: { backgroundColor: '#FFEAA7' },
-  completedDot: { backgroundColor: '#4ECDC4', opacity: 0.6 },
+  completedDot: { backgroundColor: '#fff', opacity: 0.6 },
   timelineLine: { width: 2, flex: 1, backgroundColor: '#1a1a1a', marginVertical: 4 },
-  currentLine: { backgroundColor: '#4ECDC4' },
+  currentLine: { backgroundColor: '#fff' },
   timelineContent: { flex: 1, backgroundColor: '#0a0a0a', borderRadius: 12, padding: 14, marginBottom: 4 },
-  currentTimelineContent: { backgroundColor: '#1a2a2a', borderWidth: 1, borderColor: '#4ECDC4' },
+  currentTimelineContent: { backgroundColor: '#1a2a2a', borderWidth: 1, borderColor: '#fff' },
   startingSoonTimelineContent: { backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#FFEAA7' },
   completedTimelineContent: { opacity: 0.7 },
   timelineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   timeContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  timelineTime: { color: '#4ECDC4', fontSize: 13, fontWeight: '600' },
-  currentText: { color: '#4ECDC4', fontWeight: 'bold' },
+  timelineTime: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  currentText: { color: '#fff', fontWeight: 'bold' },
   startingSoonText: { color: '#FFEAA7' },
   completedText: { color: '#666', textDecorationLine: 'line-through' },
-  timeRemainingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4ECDC4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, gap: 4 },
+  timeRemainingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, gap: 4 },
   timeRemainingText: { color: '#000', fontSize: 10, fontWeight: '600' },
   startingSoonBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEAA7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, gap: 4 },
   startingSoonBadgeText: { color: '#000', fontSize: 10, fontWeight: '600' },
@@ -722,17 +978,54 @@ const styles = StyleSheet.create({
   completedDetailsText: { color: '#555' },
   optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   optionChip: { backgroundColor: '#1a1a1a', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  optionText: { color: '#4ECDC4', fontSize: 11 },
+  optionText: { color: '#fff', fontSize: 11 },
   categoryChip: { marginTop: 10, alignSelf: 'flex-start' },
   categoryChipText: { color: '#666', fontSize: 11, textTransform: 'capitalize' },
-  currentIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#4ECDC430' },
-  currentIndicatorText: { color: '#4ECDC4', fontSize: 11, fontWeight: '500' },
+  currentIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#fff30' },
+  currentIndicatorText: { color: '#fff', fontSize: 11, fontWeight: '500' },
   checklistItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
   checklistText: { color: '#fff', fontSize: 14, flex: 1 },
   completedChecklistText: { color: '#555', textDecorationLine: 'line-through' },
   noteItem: { backgroundColor: '#0a0a0a', padding: 12, borderRadius: 10, marginBottom: 8 },
-  noteKey: { color: '#4ECDC4', fontSize: 13, fontWeight: '600', marginBottom: 4, textTransform: 'capitalize' },
+  noteKey: { color: '#fff', fontSize: 13, fontWeight: '600', marginBottom: 4, textTransform: 'capitalize' },
   noteValue: { color: '#999', fontSize: 13, lineHeight: 18 },
-  deletePlanButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,107,107,0.15)', paddingVertical: 14, borderRadius: 12, marginTop: 24, borderWidth: 1, borderColor: 'rgba(255,107,107,0.3)' },
-  deletePlanText: { color: '#FF6B6B', fontSize: 16, fontWeight: '600' },
+  deleteButton: {
+    position: 'absolute',
+    bottom: 12,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButtonText: {
+    color: '#FF6B6B',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  // Edit Mode Styles
+  editContainer: { paddingVertical: 16 },
+  editSection: { marginBottom: 24 },
+  editSectionTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  editInput: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 10, padding: 12, color: '#fff', fontSize: 15, marginBottom: 10 },
+  editRow: { flexDirection: 'row', gap: 10 },
+  editHalfInput: { flex: 1 },
+  editChecklistRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  editChecklistInput: { flex: 1, backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 10, padding: 10, color: '#fff', fontSize: 14 },
+  editScheduleCard: { backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 12, padding: 12, marginBottom: 12 },
+  editScheduleHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  editScheduleTime: { flex: 2, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 8, color: '#fff', fontSize: 13 },
+  editScheduleEmoji: { width: 60, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 8, color: '#fff', fontSize: 13, textAlign: 'center' },
+  editScheduleActivity: { backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, color: '#fff', fontSize: 14, marginBottom: 8 },
+  editScheduleDetails: { backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, color: '#fff', fontSize: 13, minHeight: 60, marginBottom: 8 },
+  editScheduleCategory: { backgroundColor: '#1a1a1a', borderRadius: 8, padding: 8, color: '#fff', fontSize: 12 },
+  editNoteRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  editNoteKey: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, color: '#fff', fontSize: 13 },
+  editNoteValue: { flex: 2, backgroundColor: '#1a1a1a', borderRadius: 8, padding: 10, color: '#fff', fontSize: 13 },
+  addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1a1a1a', paddingVertical: 12, borderRadius: 10, marginTop: 8, borderWidth: 1, borderColor: '#2a2a2a' },
+  addButtonText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  editActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 16, marginTop: 20, marginBottom: 30 },
+  cancelEditButton: { flex: 1, backgroundColor: '#1a1a1a', paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#2a2a2a' },
+  cancelEditText: { color: '#fff', fontSize: 16, fontWeight: '500' },
+  saveEditButton: { flex: 1, backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  saveEditText: { color: '#000', fontSize: 16, fontWeight: '700' },
 });

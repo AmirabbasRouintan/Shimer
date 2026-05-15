@@ -1,5 +1,5 @@
 // app/activitiesStore.ts
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export interface Activity {
   id: string;
@@ -12,6 +12,8 @@ export interface Activity {
   timerHints: string;
   checklists: string[];
   shortcuts: string[];
+  linkedGoalIds?: number[]; // Array of goal IDs linked to this activity
+  linkedChecklistIndex?: number | null; // Index of checklist linked to this activity
 }
 
 export interface ChecklistItem {
@@ -35,6 +37,12 @@ export interface Goal {
   isCompleted: boolean;
   widthPercent: number;
   remainingSeconds: number | null;
+  totalSeconds?: number | null;
+  selectedDays?: string[];
+  duration?: string;
+  trackEntireActivity?: boolean;
+  checklist?: { title: string; icon: string; index: number } | null;
+  shortcuts?: string;
 }
 
 export interface Folder {
@@ -44,14 +52,14 @@ export interface Folder {
 
 // Default activities
 const defaultActivities: Activity[] = [
-  { id: "5", name: "Work", icon: "briefcase-outline", color: "#96CEB4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "6", name: "Hobby", icon: "heart-outline", color: "#4ECDC4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "7", name: "Personal development", icon: "star-outline", color: "#FFEAA7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "8", name: "Exercises/Health", icon: "fitness-outline", color: "#FF6B6B", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "9", name: "Walk", icon: "walk-outline", color: "#F7B731", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "10", name: "Getting ready", icon: "bed-outline", color: "#FF9F4A", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "11", name: "Sleep/Rest", icon: "bed-outline", color: "#E8635E", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] },
-  { id: "12", name: "Other", icon: "folder-outline", color: "#6C5CE7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [] }
+  { id: "5", name: "Work", icon: "briefcase-outline", color: "#96CEB4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "6", name: "Hobby", icon: "heart-outline", color: "#4ECDC4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "7", name: "Personal development", icon: "star-outline", color: "#FFEAA7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "8", name: "Exercises/Health", icon: "fitness-outline", color: "#FF6B6B", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "9", name: "Walk", icon: "walk-outline", color: "#F7B731", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "10", name: "Getting ready", icon: "bed-outline", color: "#FF9F4A", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "11", name: "Sleep/Rest", icon: "bed-outline", color: "#E8635E", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
+  { id: "12", name: "Other", icon: "folder-outline", color: "#6C5CE7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null }
 ];
 
 // Default folders
@@ -71,9 +79,9 @@ const GOAL_COLORS = [
 const COMPLETION_EMOJIS = ['🎉', '✅', '🏆', '⭐', '💪', '🔥', '👏', '✨', '🎯', '💯'];
 
 const defaultGoals: Goal[] = GOAL_TITLES.map((title, index) => ({
-  id: index,
+  id: index + 1, // Start from 1 to avoid 0 which might be falsy
   title,
-  progress: index === 0 ? 75 : index === 1 ? 45 : index === 2 ? 90 : index === 3 ? 30 : index === 4 ? 60 : 0,
+  progress: index === 0 ? 75 : index === 1 ? 45 : index === 2 ? 90 : 0,
   color: GOAL_COLORS[index % GOAL_COLORS.length],
   emoji: COMPLETION_EMOJIS[index % COMPLETION_EMOJIS.length],
   isActive: false,
@@ -91,6 +99,7 @@ let showChecklistOnHome: boolean = false;
 let globalDayStart: string = "00:00";
 let globalDailyPlan: any = null;
 let globalPlanCompletedItems: Record<string, boolean> = {};
+let globalCalendarEvents: Record<string, any[]> = {};
 
 type Listener = () => void;
 const listeners: Listener[] = [];
@@ -112,6 +121,7 @@ async function loadFromFile() {
       if (data.dayStart !== undefined) globalDayStart = data.dayStart;
       if (data.dailyPlan !== undefined) globalDailyPlan = data.dailyPlan;
       if (data.planCompletedItems !== undefined) globalPlanCompletedItems = data.planCompletedItems;
+      if (data.calendarEvents !== undefined) globalCalendarEvents = data.calendarEvents;
     }
   } catch (error) {
     console.warn('Failed to load data from file', error);
@@ -131,6 +141,7 @@ async function saveToFile() {
       dayStart: globalDayStart,
       dailyPlan: globalDailyPlan,
       planCompletedItems: globalPlanCompletedItems,
+      calendarEvents: globalCalendarEvents,
     };
     await FileSystem.writeAsStringAsync(STORAGE_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
@@ -182,6 +193,42 @@ export function deleteChecklist(index: number) {
   notifyAndSave();
 }
 
+// ========== Activity-Checklist Linking Functions ==========
+export function getChecklistForActivity(activityId: string): { title: string; icon: string; index: number } | null {
+  const activity = globalActivities.find(a => a.id === activityId);
+  if (!activity || activity.linkedChecklistIndex === undefined || activity.linkedChecklistIndex === null) {
+    return null;
+  }
+
+  const checklistIndex = activity.linkedChecklistIndex;
+  const checklist = globalChecklists[checklistIndex];
+
+  if (checklist) {
+    return {
+      title: checklist.title,
+      icon: checklist.icon,
+      index: checklistIndex
+    };
+  }
+  return null;
+}
+
+export function linkActivityToChecklist(activityId: string, checklistIndex: number) {
+  const activityIndex = globalActivities.findIndex(a => a.id === activityId);
+  if (activityIndex !== -1) {
+    globalActivities[activityIndex].linkedChecklistIndex = checklistIndex;
+    notifyAndSave();
+  }
+}
+
+export function unlinkActivityFromChecklist(activityId: string) {
+  const activityIndex = globalActivities.findIndex(a => a.id === activityId);
+  if (activityIndex !== -1) {
+    globalActivities[activityIndex].linkedChecklistIndex = null;
+    notifyAndSave();
+  }
+}
+
 // ========== Goal Functions ==========
 export function getGoals(): Goal[] {
   return globalGoals.map(g => ({ ...g }));
@@ -193,7 +240,8 @@ export function setGoals(newGoals: Goal[]) {
 }
 
 export function addGoal(goal: Goal) {
-  globalGoals = [...globalGoals, { ...goal }];
+  const newGoal = { ...goal, id: Date.now() };
+  globalGoals = [...globalGoals, newGoal];
   notifyAndSave();
 }
 
@@ -205,6 +253,34 @@ export function updateGoal(id: number, goal: Goal) {
 export function deleteGoal(id: number) {
   globalGoals = globalGoals.filter(g => g.id !== id);
   notifyAndSave();
+}
+
+// ========== Activity-Goal Linking Functions ==========
+export function getGoalsForActivity(activityId: string): Goal[] {
+  const activity = globalActivities.find(a => a.id === activityId);
+  if (!activity || !activity.linkedGoalIds) return [];
+  return globalGoals.filter(goal => activity.linkedGoalIds?.includes(goal.id));
+}
+
+export function linkGoalToActivity(activityId: string, goalId: number) {
+  const activityIndex = globalActivities.findIndex(a => a.id === activityId);
+  if (activityIndex !== -1) {
+    if (!globalActivities[activityIndex].linkedGoalIds) {
+      globalActivities[activityIndex].linkedGoalIds = [];
+    }
+    if (!globalActivities[activityIndex].linkedGoalIds?.includes(goalId)) {
+      globalActivities[activityIndex].linkedGoalIds?.push(goalId);
+      notifyAndSave();
+    }
+  }
+}
+
+export function unlinkGoalFromActivity(activityId: string, goalId: number) {
+  const activityIndex = globalActivities.findIndex(a => a.id === activityId);
+  if (activityIndex !== -1 && globalActivities[activityIndex].linkedGoalIds) {
+    globalActivities[activityIndex].linkedGoalIds = globalActivities[activityIndex].linkedGoalIds?.filter(id => id !== goalId);
+    notifyAndSave();
+  }
 }
 
 // ========== Folder Functions ==========
@@ -309,10 +385,48 @@ export function getActiveTimer() {
   return activeTimerData;
 }
 
-export function setActiveTimer(data: { activityName: string; activityColor: string; durationSeconds: number } | null) {
-  activeTimerData = data ? { ...data, startTime: Date.now() } : null;
+export function setActiveTimer(data: { activityName: string; activityColor: string; durationSeconds: number; startTime?: number } | null) {
+  if (data) {
+    activeTimerData = {
+      ...data,
+      startTime: data.startTime || Date.now()
+    };
+  } else {
+    activeTimerData = null;
+  }
   notifyAndSave();
 }
 
-export default {};
+// ========== Calendar Events Functions ==========
+export function getCalendarEvents(): Record<string, any[]> {
+  return globalCalendarEvents;
+}
+
+export function setCalendarEvents(events: Record<string, any[]>) {
+  globalCalendarEvents = events;
+  notifyAndSave();
+}
+
+export function addCalendarEvent(dateKey: string, event: { title: string; time: string }) {
+  if (!globalCalendarEvents[dateKey]) {
+    globalCalendarEvents[dateKey] = [];
+  }
+  globalCalendarEvents[dateKey].push(event);
+  globalCalendarEvents[dateKey].sort((a, b) => a.time.localeCompare(b.time));
+  notifyAndSave();
+}
+
+export function deleteCalendarEvent(dateKey: string, index: number) {
+  if (globalCalendarEvents[dateKey]) {
+    globalCalendarEvents[dateKey].splice(index, 1);
+    if (globalCalendarEvents[dateKey].length === 0) {
+      delete globalCalendarEvents[dateKey];
+    }
+    notifyAndSave();
+  }
+}
+
+// Initialize by loading data
 loadFromFile();
+
+export default {};

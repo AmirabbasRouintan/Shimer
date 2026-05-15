@@ -31,7 +31,7 @@ const PATTERN_DOTS = [
 
 export default function SecureFilesScreen() {
   const router = useRouter();
-  const [lockType, setLockType] = useState<string | null>(null); // 'pin', 'fingerprint', 'pattern'
+  const [lockType, setLockType] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [attempt, setAttempt] = useState("");
   const [vaultPassword, setVaultPassword] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function SecureFilesScreen() {
       promptMessage: "Set up fingerprint lock"
     });
     if (result.success) {
-      store["vault_password"] = "fingerprint"; // just a flag
+      store["vault_password"] = "fingerprint";
       setVaultPassword("fingerprint");
       Alert.alert("Fingerprint lock set");
     }
@@ -156,11 +156,11 @@ export default function SecureFilesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push("/settings")}>
-            <Text style={styles.cancelText}>Back</Text>
+          <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
+            <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Vault Lock Setup</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerRight} />
         </View>
         <View style={styles.content}>
           <Text style={styles.instruction}>Choose how to lock your files</Text>
@@ -207,11 +207,11 @@ export default function SecureFilesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setLockType(null)}>
-            <Text style={styles.cancelText}>Back</Text>
+          <TouchableOpacity onPress={() => setLockType(null)} style={styles.headerLeft}>
+            <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Set PIN</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerRight} />
         </View>
         <View style={styles.content}>
           <TextInput
@@ -235,11 +235,11 @@ export default function SecureFilesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setLockType(null)}>
-            <Text style={styles.cancelText}>Back</Text>
+          <TouchableOpacity onPress={() => setLockType(null)} style={styles.headerLeft}>
+            <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Set Fingerprint</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerRight} />
         </View>
         <View style={styles.content}>
           <Text style={styles.instruction}>
@@ -257,11 +257,11 @@ export default function SecureFilesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setLockType(null)}>
-            <Text style={styles.cancelText}>Back</Text>
+          <TouchableOpacity onPress={() => setLockType(null)} style={styles.headerLeft}>
+            <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Draw Pattern</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerRight} />
         </View>
         <View style={styles.patternContainer}>
           <Text style={styles.instruction}>Connect at least 4 dots</Text>
@@ -277,12 +277,15 @@ export default function SecureFilesScreen() {
               />
             ))}
           </View>
-          <TouchableOpacity style={styles.saveBtn} onPress={savePattern}>
-            <Text style={styles.saveBtnText}>Save Pattern</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setPattern([])}>
-            <Text style={styles.resetText}>Reset</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+
+            <TouchableOpacity style={styles.saveBtn} onPress={savePattern}>
+              <Text style={styles.saveBtnText}>Save Pattern</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resetButton} onPress={() => setPattern([])}>
+              <Text style={styles.resetButtonText}>Reset</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -293,11 +296,11 @@ export default function SecureFilesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push("/settings")}>
-            <Text style={styles.cancelText}>Back</Text>
+          <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
+            <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Unlock Vault</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerRight} />
         </View>
         {lockType === "pin" && (
           <View style={styles.content}>
@@ -343,9 +346,11 @@ export default function SecureFilesScreen() {
                 />
               ))}
             </View>
-            <TouchableOpacity onPress={() => setPattern([])}>
-              <Text style={styles.resetText}>Clear</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.resetButton} onPress={() => setPattern([])}>
+                <Text style={styles.resetButtonText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -361,11 +366,12 @@ export default function SecureFilesScreen() {
             setIsUnlocked(false);
             router.push("/settings");
           }}
+          style={styles.headerLeft}
         >
-          <Text style={styles.cancelText}>Lock</Text>
+          <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Secure Files</Text>
-        <TouchableOpacity onPress={pickFile}>
+        <TouchableOpacity onPress={pickFile} style={styles.headerRight}>
           <Ionicons name="add" size={26} color={shadcn.colors.foreground} />
         </TouchableOpacity>
       </View>
@@ -403,19 +409,27 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 16,
     paddingBottom: 16,
-    gap: 8
+    position: "relative",
   },
-  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
+  headerLeft: {
+    position: "absolute",
+    left: 16,
+    top: 0,
+  },
+  headerRight: {
+    position: "absolute",
+    right: 16,
+    top: 0,
+  },
   headerTitle: {
     color: shadcn.colors.foreground,
     fontSize: 18,
     fontWeight: "600",
-    flex: 1,
-    textAlign: "center"
+    textAlign: "center",
   },
   content: { paddingHorizontal: 16, marginTop: 40 },
   instruction: {
@@ -444,10 +458,11 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     backgroundColor: shadcn.colors.brand,
-    padding: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: shadcn.radius.md,
     alignItems: "center",
-    marginTop: 10
+    minWidth: 120,
   },
   saveBtnText: {
     color: shadcn.colors.brandForeground,
@@ -484,5 +499,23 @@ const styles = StyleSheet.create({
     margin: 10
   },
   dotSelected: { backgroundColor: shadcn.colors.brand },
-  resetText: { color: shadcn.colors.destructive, fontSize: 16, marginTop: 20 }
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 20,
+  },
+  resetButton: {
+    backgroundColor: '#FF3B30',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: shadcn.radius.md,
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
 });

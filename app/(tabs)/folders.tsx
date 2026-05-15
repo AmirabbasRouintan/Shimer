@@ -1,3 +1,4 @@
+// app/folders.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -11,10 +12,9 @@ import { getFolders, setFolders, subscribe, Folder } from '../activitiesStore';
 function SwipeableRow({ folder, index, onDelete, onEdit }: any) {
   const translateX = useRef(new Animated.Value(0)).current;
 
-  // Only create panResponder if folder is NOT "Today"
   const panResponder = PanResponder.create({
     onMoveShouldSetPanResponder: (_, gesture) => {
-      if (folder.name === 'Today') return false; // Disable swipe for Today folder
+      if (folder.name === 'Today') return false;
       return Math.abs(gesture.dx) > 15;
     },
     onPanResponderMove: (_, gesture) => {
@@ -31,7 +31,6 @@ function SwipeableRow({ folder, index, onDelete, onEdit }: any) {
     },
   });
 
-  // Don't show delete button for Today folder
   const showDeleteButton = folder.name !== 'Today';
 
   return (
@@ -65,24 +64,36 @@ export default function FoldersScreen() {
   const [folders, setFoldersState] = useState<Folder[]>([]);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showTomorrowButton, setShowTomorrowButton] = useState(false);
   const [newFolder, setNewFolder] = useState('');
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
 
   useEffect(() => {
     // Load folders from store
-    setFoldersState(getFolders());
+    const loadedFolders = getFolders();
+    setFoldersState(loadedFolders);
+    checkTomorrowFolderExists(loadedFolders);
 
     // Subscribe to store changes
     const unsubscribe = subscribe(() => {
-      setFoldersState(getFolders());
+      const updatedFolders = getFolders();
+      setFoldersState(updatedFolders);
+      checkTomorrowFolderExists(updatedFolders);
     });
 
     return unsubscribe;
   }, []);
 
+  const checkTomorrowFolderExists = (foldersList: Folder[]) => {
+    const tomorrowExists = foldersList.some(f => f.name === 'Tomorrow');
+    setShowTomorrowButton(!tomorrowExists);
+  };
+
   const saveFolders = (updated: Folder[]) => {
     setFolders(updated);
+    setFoldersState(updated);
+    checkTomorrowFolderExists(updated);
   };
 
   const addFolder = () => {
@@ -94,6 +105,15 @@ export default function FoldersScreen() {
     saveFolders([...folders, { name: newFolder.trim(), items: [] }]);
     setNewFolder('');
     setShowNewModal(false);
+  };
+
+  const addTomorrowFolder = () => {
+    if (folders.some(f => f.name === 'Tomorrow')) {
+      Alert.alert('Exists', 'Tomorrow folder already exists.');
+      return;
+    }
+    saveFolders([...folders, { name: 'Tomorrow', items: [] }]);
+    Alert.alert('Success', 'Tomorrow folder has been added back.');
   };
 
   const openEdit = (idx: number) => {
@@ -111,20 +131,68 @@ export default function FoldersScreen() {
   };
 
   const deleteFolder = (idx: number) => {
-    if (folders[idx].name === 'Today') {
+    const folderName = folders[idx].name;
+    if (folderName === 'Today') {
       Alert.alert('Cannot Delete', 'The "Today" folder cannot be removed.');
       return;
     }
-    saveFolders(folders.filter((_, i) => i !== idx));
+
+    Alert.alert(
+      'Delete Folder',
+      `Are you sure you want to delete "${folderName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const updatedFolders = folders.filter((_, i) => i !== idx);
+            saveFolders(updatedFolders);
+
+            if (folderName === 'Tomorrow') {
+              Alert.alert(
+                'Tomorrow Folder Deleted',
+                'You can add it back using the button below.',
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        }
+      ]
+    );
   };
 
   const deleteFolderFromEdit = () => {
-    if (folders[editIndex!].name === 'Today') {
+    const folderName = folders[editIndex!].name;
+    if (folderName === 'Today') {
       Alert.alert('Cannot Delete', 'The "Today" folder cannot be removed.');
       return;
     }
-    saveFolders(folders.filter((_, i) => i !== editIndex));
-    setShowEditModal(false);
+
+    Alert.alert(
+      'Delete Folder',
+      `Delete "${folderName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const updatedFolders = folders.filter((_, i) => i !== editIndex);
+            saveFolders(updatedFolders);
+            setShowEditModal(false);
+
+            if (folderName === 'Tomorrow') {
+              Alert.alert(
+                'Tomorrow Folder Deleted',
+                'You can add it back using the button below.',
+                [{ text: 'OK' }]
+              );
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -141,18 +209,27 @@ export default function FoldersScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={{ paddingTop: 16 }}>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingTop: 16, paddingBottom: 100 }}>
         {folders.map((folder, idx) => (
           <SwipeableRow key={idx} folder={folder} index={idx} onDelete={deleteFolder} onEdit={openEdit} />
         ))}
       </ScrollView>
 
+      {/* Tip Container */}
       <View style={styles.tipContainer}>
         <Text style={styles.tipText}>
           <Text style={styles.boldText}>Tap</Text> a folder to rename it. Swipe
           <Text style={styles.boldText}> left</Text> to quickly delete.
         </Text>
       </View>
+
+      {/* Add Tomorrow Folder Button - Below the paragraph */}
+      {showTomorrowButton && (
+        <TouchableOpacity style={styles.addTomorrowButton} onPress={addTomorrowFolder}>
+          <Ionicons name="add-circle-outline" size={20} color="#aaa" />
+          <Text style={styles.addTomorrowButtonText}>Add "Tomorrow" folder</Text>
+        </TouchableOpacity>
+      )}
 
       {/* New Folder Modal */}
       <Modal visible={showNewModal} transparent animationType="fade">
@@ -278,6 +355,46 @@ const styles = StyleSheet.create({
   folderContent: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   folderText: { color: shadcn.colors.foreground, fontSize: 16 },
   folderCount: { color: shadcn.colors.mutedForeground, fontSize: 13 },
+
+  // Tip Container - Centered above button
+  tipContainer: {
+    position: 'absolute',
+    bottom: 70,
+    left: 0,
+    right: 0,
+    marginHorizontal: 20,
+    paddingHorizontal: 8,
+  },
+  tipText: {
+    color: '#888',  // Change from current value to a darker gray
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+    opacity: 0.7,
+
+  },
+  boldText: {
+    fontWeight: "bold",
+    color: '#aaa',  // Gray color instead of white
+    opacity: 0.7,
+  },
+
+  // Add Tomorrow Folder Button - Below paragraph
+  addTomorrowButton: {
+    position: 'absolute',
+    bottom: 15,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    zIndex: 10,
+  },
+  addTomorrowButtonText: {
+    color: '#aaa',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { backgroundColor: shadcn.colors.card, borderRadius: 16, padding: 24, width: '80%' },
   modalTitle: { color: shadcn.colors.foreground, fontSize: 18, fontWeight: '600', marginBottom: 16 },
@@ -291,15 +408,4 @@ const styles = StyleSheet.create({
   modalCreate: { color: shadcn.colors.foreground, fontSize: 16, fontWeight: '600' },
   editDeleteButton: { flexDirection: 'row', alignItems: 'center', gap: 5, marginRight: 'auto' },
   editDeleteText: { color: shadcn.colors.destructive, fontSize: 16, fontWeight: '600' },
-  tipContainer: { margin: 20, paddingHorizontal: 8 },
-  tipText: {
-    color: shadcn.colors.mutedForeground,
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 18
-  },
-  boldText: {
-    fontWeight: "bold",
-    color: shadcn.colors.foreground,
-  },
 });

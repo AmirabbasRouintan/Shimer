@@ -1,6 +1,6 @@
 // app/settings.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { getChecklists, subscribe, Checklist, getFolders, getDayStart } from "../activitiesStore";
+import { getChecklists, subscribe, Checklist, getFolders, getDayStart, getDailyPlan } from "../activitiesStore";
 
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
@@ -58,6 +58,8 @@ export default function SettingsScreen() {
   const [lastBackup, setLastBackup] = useState("Never");
   const [dayStart, setDayStart] = useState("00:00");
   const [homeScreenSummary, setHomeScreenSummary] = useState("Clock, Tasks");
+  const [lastPlannedDate, setLastPlannedDate] = useState<{ date: string; plan: any } | null>(null);
+  const [plannedDatesCount, setPlannedDatesCount] = useState(0);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -88,6 +90,32 @@ export default function SettingsScreen() {
 
     updateDayStart();
     const unsubscribe = subscribe(updateDayStart);
+    return unsubscribe;
+  }, []);
+
+  // Load last planned date
+  useEffect(() => {
+    const loadLastPlannedDate = () => {
+      const allPlans = getDailyPlan() || {};
+      const dates = Object.keys(allPlans)
+        .filter(key => allPlans[key] !== null)
+        .sort((a, b) => b.localeCompare(a));
+
+      setPlannedDatesCount(dates.length);
+
+      if (dates.length > 0) {
+        const latestDate = dates[0];
+        setLastPlannedDate({
+          date: latestDate,
+          plan: allPlans[latestDate]
+        });
+      } else {
+        setLastPlannedDate(null);
+      }
+    };
+
+    loadLastPlannedDate();
+    const unsubscribe = subscribe(loadLastPlannedDate);
     return unsubscribe;
   }, []);
 
@@ -259,6 +287,16 @@ export default function SettingsScreen() {
     store["backup_frequency"] = freq;
   };
 
+  const formatDisplayDate = (dateKey: string): string => {
+    const [year, month, day] = dateKey.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
   const SectionHeader = ({ icon, title }: { icon: string; title: string }) => (
     <View style={styles.sectionHeaderContainer}>
       <Ionicons name={icon as any} size={16} color="#fff" />
@@ -295,8 +333,16 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
+        {/* VOICE NOTES - NEW SECTION */}
+        <SectionHeader icon="mic-outline" title="VOICE NOTES" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/voice-notes"); }}>
+          <Ionicons name="mic-outline" size={22} color={shadcn.colors.foreground} />
+          <Text style={styles.rowText}>Voice Notes</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+        </TouchableOpacity>
+
         {/* CHECKLISTS */}
-        <SectionHeader icon="" title="CHECKLISTS" />
+        <SectionHeader icon="list-outline" title="CHECKLISTS" />
         {checklists.map((list, index) => (
           <TouchableOpacity
             key={index}
@@ -318,21 +364,65 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* SHORTCUTS */}
-        <SectionHeader icon="" title="SHORTCUTS" />
+        <SectionHeader icon="flash-outline" title="SHORTCUTS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-shortcut"); }}>
           <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
           <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Shortcut</Text>
         </TouchableOpacity>
 
         {/* NOTES */}
-        <SectionHeader icon="" title="NOTES" />
+        <SectionHeader icon="document-text-outline" title="NOTES" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-note"); }}>
           <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
           <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Note</Text>
         </TouchableOpacity>
 
+        {/* JSON PLANNER */}
+        <SectionHeader icon="code-slash" title="JSON PLANNER" />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/calendar"); }}>
+          <Ionicons name="code-slash" size={22} color={shadcn.colors.foreground} />
+          <Text style={styles.rowText}>Calendar Planner</Text>
+          <Text style={styles.valueText}>Create new plan</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/planned-dates"); }}>
+          <Ionicons name="list-outline" size={22} color={shadcn.colors.foreground} />
+          <Text style={styles.rowText}>All Plans</Text>
+          <Text style={styles.valueText}>{plannedDatesCount} {plannedDatesCount === 1 ? 'plan' : 'plans'}</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+        </TouchableOpacity>
+
+        {lastPlannedDate && (
+          <TouchableOpacity
+            style={styles.lastPlanRow}
+            activeOpacity={0.7}
+            onPress={() => {
+              const [year, month, day] = lastPlannedDate.date.split('-');
+              router.push({
+                pathname: '/calendar',
+                params: {
+                  openPlanner: 'true',
+                  selectedYear: year,
+                  selectedMonth: month,
+                  selectedDay: day,
+                }
+              });
+            }}
+          >
+            <Ionicons name="calendar-outline" size={22} color={shadcn.colors.foreground} />
+            <View style={styles.lastPlanInfo}>
+              <Text style={styles.rowText}>Last Plan</Text>
+              <Text style={styles.lastPlanDate}>{formatDisplayDate(lastPlannedDate.date)}</Text>
+              {lastPlannedDate.plan.name && (
+                <Text style={styles.lastPlanName} numberOfLines={1}>{lastPlannedDate.plan.name}</Text>
+              )}
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+          </TouchableOpacity>
+        )}
+
         {/* SETTINGS */}
-        <SectionHeader icon="" title="SETTINGS" />
+        <SectionHeader icon="settings-outline" title="SETTINGS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/folders"); }}>
           <Ionicons name="folder-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Folders</Text>
@@ -353,7 +443,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* BACKUPS */}
-        <SectionHeader icon="" title="BACKUPS" />
+        <SectionHeader icon="cloud-outline" title="BACKUPS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); handleCreateBackup(); }}>
           <Ionicons name="cloud-upload-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Create Backup</Text>
@@ -374,7 +464,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* NOTIFICATIONS */}
-        <SectionHeader icon="" title="NOTIFICATIONS" />
+        <SectionHeader icon="notifications-outline" title="NOTIFICATIONS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7}>
           <Ionicons name="alarm-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Time to Break</Text>
@@ -393,7 +483,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* SECURE FILE */}
-        <SectionHeader icon="" title="SECURE FILE" />
+        <SectionHeader icon="lock-closed-outline" title="SECURE FILE" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/secure-files"); }}>
           <Ionicons name="lock-closed-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Secure File Vault</Text>
@@ -401,7 +491,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {/* ABOUT */}
-        <SectionHeader icon="" title="ABOUT" />
+        <SectionHeader icon="information-circle-outline" title="ABOUT" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/ask-question"); }}>
           <Ionicons name="help-circle-outline" size={22} color={shadcn.colors.foreground} />
           <Text style={styles.rowText}>Ask a Question</Text>
@@ -505,6 +595,30 @@ const styles = StyleSheet.create({
   rowText: { ...shadcn.typography.body, color: shadcn.colors.foreground, flex: 1 },
   badge: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },
   valueText: { ...shadcn.typography.caption, color: "#fff", marginRight: shadcn.spacing.sm },
+  lastPlanRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: shadcn.spacing.md,
+    paddingHorizontal: shadcn.spacing.md,
+    borderRadius: shadcn.radius.lg,
+    marginBottom: shadcn.spacing.xs,
+    gap: shadcn.spacing.md,
+  },
+  lastPlanInfo: {
+    flex: 1,
+  },
+  lastPlanDate: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  lastPlanName: {
+    color: shadcn.colors.foreground,
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   versionContainer: { marginTop: 40, marginBottom: 20, alignItems: "center" },
   versionText: { ...shadcn.typography.caption, color: shadcn.colors.mutedForeground, marginTop: shadcn.spacing.xs },
   emptyText: { ...shadcn.typography.bodySmall, color: shadcn.colors.mutedForeground, textAlign: "center", marginVertical: shadcn.spacing.md },

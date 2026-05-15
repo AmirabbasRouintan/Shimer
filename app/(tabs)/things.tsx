@@ -15,7 +15,8 @@ import {
   View
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
-import { getActivities, setActivities, subscribe, Activity, setActiveTimer } from "../activitiesStore";
+import { getActivities, setActivities, subscribe, Activity, setActiveTimer , getActiveTimer } from "../activitiesStore";
+
 
 const iconOptions = [
   "folder-outline",
@@ -153,19 +154,42 @@ export default function ThingsScreen() {
     }
 
     const durationSeconds = totalMinutes * 60;
+    const activeTimer = getActiveTimer();
 
-    // Save timer to store
-    setActiveTimer({
-      activityName: selectedActivity || "",
-      activityColor: selectedActivityColor,
-      durationSeconds: durationSeconds,
-    });
-
-    setShowTimerPicker(false);
-    setSelectedActivity(null);
-
-    // Navigate to index page
-    router.replace("/");
+    if (activeTimer) {
+      // There's already an active timer running
+      Alert.alert(
+        "Timer Already Running",
+        `"${activeTimer.activityName}" is currently running. Starting a new activity will replace it. Continue?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Replace",
+            style: "destructive",
+            onPress: () => {
+              setActiveTimer({
+                activityName: selectedActivity || "",
+                activityColor: selectedActivityColor,
+                durationSeconds: durationSeconds,
+              });
+              setShowTimerPicker(false);
+              setSelectedActivity(null);
+              router.replace("/");
+            }
+          }
+        ]
+      );
+    } else {
+      // No active timer, proceed normally
+      setActiveTimer({
+        activityName: selectedActivity || "",
+        activityColor: selectedActivityColor,
+        durationSeconds: durationSeconds,
+      });
+      setShowTimerPicker(false);
+      setSelectedActivity(null);
+      router.replace("/");
+    }
   };
 
   const hours = Array.from({ length: 24 }, (_, i) => i);

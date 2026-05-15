@@ -51,7 +51,7 @@ export default function EditThingsScreen() {
       return;
     }
     Alert.alert(
-      "Delete Activity",
+      "Delete",
       `Are you sure you want to delete "${item.name}"?`,
       [
         { text: "Cancel", style: "cancel" },
@@ -61,6 +61,8 @@ export default function EditThingsScreen() {
           onPress: () => {
             const newActivities = activities.filter((_, i) => i !== index);
             saveActivities(newActivities);
+            // No need to navigate - we're already on the edit screen
+            // The list will automatically update and show the remaining activities
           }
         }
       ]
@@ -105,17 +107,6 @@ export default function EditThingsScreen() {
           <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
           <Ionicons name={item.icon as any} size={18} color={shadcn.colors.mutedForeground} style={styles.activityIcon} />
           <Text style={styles.activityName} numberOfLines={1}>{item.name}</Text>
-          <View style={styles.rowActions}>
-            <TouchableOpacity onPress={() => moveUp(index)} style={styles.actionButton} disabled={index === 0}>
-              <Ionicons name="arrow-up" size={16} color={index === 0 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => moveDown(index)} style={styles.actionButton} disabled={index === activities.length - 1}>
-              <Ionicons name="arrow-down" size={16} color={index === activities.length - 1 ? shadcn.colors.border : shadcn.colors.mutedForeground} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(item, index)} style={styles.actionButton}>
-              <Ionicons name="trash-outline" size={16} color={shadcn.colors.destructive} />
-            </TouchableOpacity>
-          </View>
         </View>
       </TouchableOpacity>
     );
