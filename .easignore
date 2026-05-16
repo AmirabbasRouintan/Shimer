@@ -1,0 +1,9 @@
+node_modules
+.git
+.expo
+__tests__
+coverage
+.vscode
+.idea
+*.log
+*.tsbuildinfo

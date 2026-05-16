@@ -12,8 +12,8 @@ export interface Activity {
   timerHints: string;
   checklists: string[];
   shortcuts: string[];
-  linkedGoalIds?: number[]; // Array of goal IDs linked to this activity
-  linkedChecklistIndex?: number | null; // Index of checklist linked to this activity
+  linkedGoalIds?: number[];
+  linkedChecklistIndex?: number | null;
 }
 
 export interface ChecklistItem {
@@ -47,7 +47,19 @@ export interface Goal {
 
 export interface Folder {
   name: string;
-  items: string[]; // Array of activity IDs or names
+  items: string[];
+}
+
+export interface HistoryLog {
+  id: string;
+  type: 'activity' | 'goal' | 'break';
+  title: string;
+  color: string;
+  durationSeconds: number;
+  durationMinutes: number;
+  durationFormatted: string;
+  timestamp: number;
+  date: string;
 }
 
 // Default activities
@@ -62,24 +74,17 @@ const defaultActivities: Activity[] = [
   { id: "12", name: "Other", icon: "folder-outline", color: "#6C5CE7", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null }
 ];
 
-// Default folders
 const defaultFolders: Folder[] = [
   { name: "Today", items: [] },
   { name: "Tomorrow", items: [] }
 ];
 
-// Default goals
-const GOAL_TITLES = [
-  "Morning Routine", "Work Focus", "Study Session",
-];
-const GOAL_COLORS = [
-  '#4ECDC4', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1',
-  '#96CEB4', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7',
-];
+const GOAL_TITLES = ["Morning Routine", "Work Focus", "Study Session"];
+const GOAL_COLORS = ['#4ECDC4', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1', '#96CEB4', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7'];
 const COMPLETION_EMOJIS = ['🎉', '✅', '🏆', '⭐', '💪', '🔥', '👏', '✨', '🎯', '💯'];
 
 const defaultGoals: Goal[] = GOAL_TITLES.map((title, index) => ({
-  id: index + 1, // Start from 1 to avoid 0 which might be falsy
+  id: index + 1,
   title,
   progress: index === 0 ? 75 : index === 1 ? 45 : index === 2 ? 90 : 0,
   color: GOAL_COLORS[index % GOAL_COLORS.length],
@@ -100,6 +105,7 @@ let globalDayStart: string = "00:00";
 let globalDailyPlan: any = null;
 let globalPlanCompletedItems: Record<string, boolean> = {};
 let globalCalendarEvents: Record<string, any[]> = {};
+let globalHistoryLogs: HistoryLog[] = [];
 
 type Listener = () => void;
 const listeners: Listener[] = [];
@@ -122,6 +128,7 @@ async function loadFromFile() {
       if (data.dailyPlan !== undefined) globalDailyPlan = data.dailyPlan;
       if (data.planCompletedItems !== undefined) globalPlanCompletedItems = data.planCompletedItems;
       if (data.calendarEvents !== undefined) globalCalendarEvents = data.calendarEvents;
+      if (data.historyLogs !== undefined) globalHistoryLogs = data.historyLogs;
     }
   } catch (error) {
     console.warn('Failed to load data from file', error);
@@ -142,6 +149,7 @@ async function saveToFile() {
       dailyPlan: globalDailyPlan,
       planCompletedItems: globalPlanCompletedItems,
       calendarEvents: globalCalendarEvents,
+      historyLogs: globalHistoryLogs,
     };
     await FileSystem.writeAsStringAsync(STORAGE_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
@@ -149,7 +157,6 @@ async function saveToFile() {
   }
 }
 
-// Helper to notify and save
 function notifyAndSave() {
   listeners.forEach(listener => listener());
   saveToFile();
@@ -163,6 +170,39 @@ export function getActivities(): Activity[] {
 export function setActivities(newActivities: Activity[]) {
   globalActivities = newActivities;
   notifyAndSave();
+}
+
+// ========== History Functions ==========
+let isAddingHistory = false;
+
+export function getHistoryLogs(): HistoryLog[] {
+  return globalHistoryLogs;
+}
+
+export function addHistoryLog(log: Omit<HistoryLog, 'id'>) {
+  if (isAddingHistory) return;
+
+  isAddingHistory = true;
+  const newLog: HistoryLog = {
+    ...log,
+    id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
+  };
+  globalHistoryLogs = [newLog, ...globalHistoryLogs];
+  if (globalHistoryLogs.length > 1000) {
+    globalHistoryLogs = globalHistoryLogs.slice(0, 1000);
+  }
+  saveToFile();
+  isAddingHistory = false;
+}
+
+export function clearHistoryLogs() {
+  globalHistoryLogs = [];
+  notifyAndSave();
+}
+
+export function getHistoryForDate(date: Date): HistoryLog[] {
+  const dateStr = date.toDateString();
+  return globalHistoryLogs.filter(log => new Date(log.timestamp).toDateString() === dateStr);
 }
 
 // ========== Checklist Functions ==========
@@ -193,21 +233,18 @@ export function deleteChecklist(index: number) {
   notifyAndSave();
 }
 
-// ========== Activity-Checklist Linking Functions ==========
+// ========== Activity-Checklist Linking ==========
 export function getChecklistForActivity(activityId: string): { title: string; icon: string; index: number } | null {
   const activity = globalActivities.find(a => a.id === activityId);
   if (!activity || activity.linkedChecklistIndex === undefined || activity.linkedChecklistIndex === null) {
     return null;
   }
-
-  const checklistIndex = activity.linkedChecklistIndex;
-  const checklist = globalChecklists[checklistIndex];
-
+  const checklist = globalChecklists[activity.linkedChecklistIndex];
   if (checklist) {
     return {
       title: checklist.title,
       icon: checklist.icon,
-      index: checklistIndex
+      index: activity.linkedChecklistIndex
     };
   }
   return null;
@@ -255,7 +292,7 @@ export function deleteGoal(id: number) {
   notifyAndSave();
 }
 
-// ========== Activity-Goal Linking Functions ==========
+// ========== Activity-Goal Linking ==========
 export function getGoalsForActivity(activityId: string): Goal[] {
   const activity = globalActivities.find(a => a.id === activityId);
   if (!activity || !activity.linkedGoalIds) return [];
@@ -397,7 +434,7 @@ export function setActiveTimer(data: { activityName: string; activityColor: stri
   notifyAndSave();
 }
 
-// ========== Calendar Events Functions ==========
+// ========== Calendar Events ==========
 export function getCalendarEvents(): Record<string, any[]> {
   return globalCalendarEvents;
 }
@@ -426,7 +463,4 @@ export function deleteCalendarEvent(dateKey: string, index: number) {
   }
 }
 
-// Initialize by loading data
 loadFromFile();
-
-export default {};

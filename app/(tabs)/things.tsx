@@ -15,7 +15,7 @@ import {
   View
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
-import { getActivities, setActivities, subscribe, Activity, setActiveTimer , getActiveTimer } from "../activitiesStore";
+import { getActivities, setActivities, subscribe, Activity, setActiveTimer, getActiveTimer } from "../activitiesStore";
 
 
 const iconOptions = [
@@ -146,6 +146,8 @@ export default function ThingsScreen() {
     setShowTimerPicker(true);
   };
 
+  // In things.tsx, update the handleTimerConfirm function:
+
   const handleTimerConfirm = () => {
     const totalMinutes = timerHours * 60 + timerMinutes;
     if (totalMinutes === 0) {
@@ -157,7 +159,6 @@ export default function ThingsScreen() {
     const activeTimer = getActiveTimer();
 
     if (activeTimer) {
-      // There's already an active timer running
       Alert.alert(
         "Timer Already Running",
         `"${activeTimer.activityName}" is currently running. Starting a new activity will replace it. Continue?`,
@@ -171,6 +172,7 @@ export default function ThingsScreen() {
                 activityName: selectedActivity || "",
                 activityColor: selectedActivityColor,
                 durationSeconds: durationSeconds,
+                startTime: Date.now(), // Add start time
               });
               setShowTimerPicker(false);
               setSelectedActivity(null);
@@ -180,11 +182,11 @@ export default function ThingsScreen() {
         ]
       );
     } else {
-      // No active timer, proceed normally
       setActiveTimer({
         activityName: selectedActivity || "",
         activityColor: selectedActivityColor,
         durationSeconds: durationSeconds,
+        startTime: Date.now(), // Add start time
       });
       setShowTimerPicker(false);
       setSelectedActivity(null);
