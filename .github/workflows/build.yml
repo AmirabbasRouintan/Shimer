@@ -16,10 +16,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Install dependencies
+      - name: Fix registry URLs in lockfile and install
         run: |
-          rm -f package-lock.json
-          npm install --registry=https://registry.npmjs.org/
+          sed -i 's|https://package-mirror\.liara\.ir/repository/npm/|https://registry.npmjs.org/|g' package-lock.json
+          npm install
       - run: npx expo prebuild --no-install
       - name: Build Release APK
         run: cd android && ./gradlew assembleRelease
