@@ -62,6 +62,30 @@ export interface HistoryLog {
   date: string;
 }
 
+export interface ActiveTimerData {
+  activityName: string;
+  activityColor: string;
+  durationSeconds: number;
+  startTime: number;
+  userSelectedDuration?: number;
+}
+
+export interface SuspendedGoalData {
+  id: number;
+  remainingSeconds: number;
+  color: string;
+  title: string;
+  totalSeconds?: number;
+  userDuration?: number;
+}
+
+export interface SuspendedActivityData {
+  name: string;
+  color: string;
+  remainingSeconds: number;
+  userDuration?: number;
+}
+
 // Default activities
 const defaultActivities: Activity[] = [
   { id: "5", name: "Work", icon: "briefcase-outline", color: "#96CEB4", keepScreenOn: false, pomodoro: 25, goals: "", timerHints: "", checklists: [], shortcuts: [], linkedGoalIds: [], linkedChecklistIndex: null },
@@ -101,6 +125,7 @@ let globalGoals: Goal[] = [...defaultGoals];
 let globalFolders: Folder[] = [...defaultFolders];
 let selectedChecklistIndex: number = 0;
 let showChecklistOnHome: boolean = false;
+let maxPausedActivities: number = 3;
 let globalDayStart: string = "00:00";
 let globalDailyPlan: any = null;
 let globalPlanCompletedItems: Record<string, boolean> = {};
@@ -124,11 +149,17 @@ async function loadFromFile() {
       if (data.folders) globalFolders = data.folders;
       if (data.selectedChecklistIndex !== undefined) selectedChecklistIndex = data.selectedChecklistIndex;
       if (data.showChecklistOnHome !== undefined) showChecklistOnHome = data.showChecklistOnHome;
+      if (data.maxPausedActivities !== undefined) maxPausedActivities = data.maxPausedActivities;
       if (data.dayStart !== undefined) globalDayStart = data.dayStart;
       if (data.dailyPlan !== undefined) globalDailyPlan = data.dailyPlan;
       if (data.planCompletedItems !== undefined) globalPlanCompletedItems = data.planCompletedItems;
       if (data.calendarEvents !== undefined) globalCalendarEvents = data.calendarEvents;
       if (data.historyLogs !== undefined) globalHistoryLogs = data.historyLogs;
+      if (data.activeTimer) {
+        activeTimerData = data.activeTimer;
+      }
+      if (data.suspendedGoal !== undefined) globalSuspendedGoal = data.suspendedGoal;
+      if (data.suspendedActivities !== undefined) globalSuspendedActivities = data.suspendedActivities;
     }
   } catch (error) {
     console.warn('Failed to load data from file', error);
@@ -145,11 +176,15 @@ async function saveToFile() {
       folders: globalFolders,
       selectedChecklistIndex,
       showChecklistOnHome,
+      maxPausedActivities,
       dayStart: globalDayStart,
       dailyPlan: globalDailyPlan,
       planCompletedItems: globalPlanCompletedItems,
       calendarEvents: globalCalendarEvents,
       historyLogs: globalHistoryLogs,
+      activeTimer: activeTimerData,
+      suspendedGoal: globalSuspendedGoal,
+      suspendedActivities: globalSuspendedActivities,
     };
     await FileSystem.writeAsStringAsync(STORAGE_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
@@ -195,8 +230,152 @@ export function addHistoryLog(log: Omit<HistoryLog, 'id'>) {
   isAddingHistory = false;
 }
 
+// Helper function for formatting duration in store
+function formatDurationForStore(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    if (minutes > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${hours}h`;
+    }
+  } else if (minutes > 0) {
+    if (remainingSeconds > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${minutes}m`;
+    }
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+// Add history log with overlap removal - SPLITS overlapping logs instead of deleting them
+export function addHistoryLogWithOverlapRemoval(
+  log: Omit<HistoryLog, 'id'>,
+  startTimestamp: number,
+  endTimestamp: number
+) {
+  if (isAddingHistory) return;
+
+  isAddingHistory = true;
+
+  const newLog: HistoryLog = {
+    ...log,
+    id: Date.now().toString() + Math.random().toString(36).substr(2, 6),
+  };
+
+  const resultLogs: HistoryLog[] = [];
+
+  for (const existingLog of globalHistoryLogs) {
+    const existingStart = existingLog.timestamp;
+    const existingEnd = existingLog.timestamp + (existingLog.durationSeconds * 1000);
+
+    // No overlap - keep the log as is
+    if (existingEnd <= startTimestamp || existingStart >= endTimestamp) {
+      resultLogs.push(existingLog);
+      continue;
+    }
+
+    // Case 1: Existing log starts BEFORE and ends AFTER the new log 
+    if (existingStart < startTimestamp && existingEnd > endTimestamp) {
+      // Left part (before the new log)
+      const leftDuration = (startTimestamp - existingStart) / 1000;
+      if (leftDuration > 0) {
+        resultLogs.push({
+          ...existingLog,
+          durationSeconds: leftDuration,
+          durationMinutes: Math.floor(leftDuration / 60),
+          durationFormatted: formatDurationForStore(leftDuration),
+        });
+      }
+
+      // Right part (after the new log)
+      const rightDuration = (existingEnd - endTimestamp) / 1000;
+      if (rightDuration > 0) {
+        resultLogs.push({
+          ...existingLog,
+          durationSeconds: rightDuration,
+          durationMinutes: Math.floor(rightDuration / 60),
+          durationFormatted: formatDurationForStore(rightDuration),
+          timestamp: endTimestamp,
+        });
+      }
+      continue;
+    }
+
+    // Case 2: Existing log starts BEFORE and overlaps at the END
+    if (existingStart < startTimestamp && existingEnd > startTimestamp && existingEnd <= endTimestamp) {
+      const leftDuration = (startTimestamp - existingStart) / 1000;
+      if (leftDuration > 0) {
+        resultLogs.push({
+          ...existingLog,
+          durationSeconds: leftDuration,
+          durationMinutes: Math.floor(leftDuration / 60),
+          durationFormatted: formatDurationForStore(leftDuration),
+        });
+      }
+      continue;
+    }
+
+    // Case 3: Existing log starts INSIDE and ends AFTER the new log
+    if (existingStart >= startTimestamp && existingStart < endTimestamp && existingEnd > endTimestamp) {
+      const rightDuration = (existingEnd - endTimestamp) / 1000;
+      if (rightDuration > 0) {
+        resultLogs.push({
+          ...existingLog,
+          durationSeconds: rightDuration,
+          durationMinutes: Math.floor(rightDuration / 60),
+          durationFormatted: formatDurationForStore(rightDuration),
+          timestamp: endTimestamp,
+        });
+      }
+      continue;
+    }
+
+    // Case 4: Existing log is completely inside the new log - skip it (removed)
+  }
+
+  // Add the new log
+  resultLogs.push(newLog);
+
+  // Sort by timestamp (newest first for display)
+  resultLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+  globalHistoryLogs = resultLogs;
+
+  // Keep only last 1000 entries
+  if (globalHistoryLogs.length > 1000) {
+    globalHistoryLogs = globalHistoryLogs.slice(0, 1000);
+  }
+
+  saveToFile();
+  isAddingHistory = false;
+}
+
+export function updateHistoryLog(id: string, updatedLog: HistoryLog) {
+  const index = globalHistoryLogs.findIndex(log => log.id === id);
+  if (index !== -1) {
+    globalHistoryLogs[index] = { ...updatedLog, id };
+    notifyAndSave();
+  }
+}
+
+export function deleteHistoryLog(id: string) {
+  globalHistoryLogs = globalHistoryLogs.filter(log => log.id !== id);
+  notifyAndSave();
+}
+
 export function clearHistoryLogs() {
   globalHistoryLogs = [];
+  notifyAndSave();
+}
+
+export function replaceHistoryLogs(logs: HistoryLog[]) {
+  globalHistoryLogs = logs.map(l => ({ ...l }));
   notifyAndSave();
 }
 
@@ -367,6 +546,16 @@ export function setShowChecklistOnHome(value: boolean) {
   notifyAndSave();
 }
 
+// ========== Max Paused Activities ==========
+export function getMaxPausedActivities(): number {
+  return maxPausedActivities;
+}
+
+export function setMaxPausedActivities(value: number) {
+  maxPausedActivities = Math.max(1, Math.min(10, value));
+  notifyAndSave();
+}
+
 // ========== Day Start Settings ==========
 export function getDayStart(): string {
   return globalDayStart;
@@ -391,6 +580,10 @@ export function getPlanCompletedItem(key: string): boolean {
   return globalPlanCompletedItems[key] || false;
 }
 
+export function getAllPlanCompletedItems(): Record<string, boolean> {
+  return { ...globalPlanCompletedItems };
+}
+
 export function setPlanCompletedItem(key: string, value: boolean) {
   globalPlanCompletedItems[key] = value;
   notifyAndSave();
@@ -411,26 +604,85 @@ export function subscribe(listener: Listener) {
 }
 
 // ========== Timer State ==========
-let activeTimerData: {
-  activityName: string;
-  activityColor: string;
-  durationSeconds: number;
-  startTime: number;
-} | null = null;
+let activeTimerData: ActiveTimerData | null = null;
 
-export function getActiveTimer() {
+export function getActiveTimer(): ActiveTimerData | null {
   return activeTimerData;
 }
 
-export function setActiveTimer(data: { activityName: string; activityColor: string; durationSeconds: number; startTime?: number } | null) {
+export function setActiveTimer(data: { activityName: string; activityColor: string; durationSeconds: number; startTime?: number; userSelectedDuration?: number } | null) {
   if (data) {
     activeTimerData = {
       ...data,
-      startTime: data.startTime || Date.now()
+      startTime: data.startTime || Date.now(),
+      userSelectedDuration: data.userSelectedDuration || data.durationSeconds
     };
   } else {
     activeTimerData = null;
   }
+  notifyAndSave();
+}
+
+// ========== Pending Pause (for "Pause & Start New" in things.tsx) ==========
+let pendingPauseActivity: { name: string; color: string; remainingSeconds: number; userDuration?: number } | null = null;
+
+export function setPendingPauseActivity(data: { name: string; color: string; remainingSeconds: number; userDuration?: number } | null) {
+  pendingPauseActivity = data;
+}
+
+export function getPendingPauseActivity() {
+  return pendingPauseActivity;
+}
+
+export function clearPendingPauseActivity() {
+  pendingPauseActivity = null;
+}
+
+// Pre-break timer data (saved before break interval overwrites activeTimerData)
+let preBreakTimerData: { name: string; color: string; remainingSeconds: number; userDuration?: number } | null = null;
+
+// Suspended / Paused items (persisted so main.tsx can access them)
+let globalSuspendedGoal: SuspendedGoalData | null = null;
+let globalSuspendedActivities: SuspendedActivityData[] = [];
+
+export function setPreBreakTimerData(data: { name: string; color: string; remainingSeconds: number; userDuration?: number } | null) {
+  preBreakTimerData = data;
+}
+
+export function getPreBreakTimerData() {
+  return preBreakTimerData;
+}
+
+export function clearPreBreakTimerData() {
+  preBreakTimerData = null;
+}
+
+// ========== Suspended/Paused Items (persisted for main.tsx) ==========
+export function getSuspendedGoal(): SuspendedGoalData | null {
+  return globalSuspendedGoal;
+}
+
+export function setSuspendedGoal(data: SuspendedGoalData | null) {
+  globalSuspendedGoal = data;
+  notifyAndSave();
+}
+
+export function getSuspendedActivities(): SuspendedActivityData[] {
+  return [...globalSuspendedActivities];
+}
+
+export function setSuspendedActivities(data: SuspendedActivityData[]) {
+  globalSuspendedActivities = [...data];
+  notifyAndSave();
+}
+
+export function addSuspendedActivity(data: SuspendedActivityData) {
+  globalSuspendedActivities = [...globalSuspendedActivities, data];
+  notifyAndSave();
+}
+
+export function removeSuspendedActivity(index: number) {
+  globalSuspendedActivities = globalSuspendedActivities.filter((_, i) => i !== index);
   notifyAndSave();
 }
 

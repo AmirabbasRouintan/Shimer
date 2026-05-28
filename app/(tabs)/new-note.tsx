@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -44,7 +44,7 @@ const editorHtml = `
     
     blockquote {
       position: relative;
-      border-left: 4px solid #4ECDC4;
+      border-left: 4px solid #fff;
       margin: 16px 0;
       padding: 12px 16px 12px 24px;
       color: #aaa;
@@ -58,7 +58,7 @@ const editorHtml = `
       left: 8px;
       top: 0;
       font-size: 32px;
-      color: #4ECDC4;
+      color: #fff;
       line-height: 1;
     }
     blockquote::after {
@@ -67,7 +67,7 @@ const editorHtml = `
       right: 12px;
       bottom: -8px;
       font-size: 32px;
-      color: #4ECDC4;
+      color: #fff;
       line-height: 1;
     }
     
@@ -78,7 +78,7 @@ const editorHtml = `
       border-radius: 8px;
       font-family: monospace;
       font-size: 14px;
-      color: #4ECDC4;
+      color: #fff;
       white-space: pre-wrap;
     }
   </style>
@@ -124,6 +124,8 @@ const editorHtml = `
 
 export default function NewNoteScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ noteId?: string }>();
+  const noteId = params.noteId;
   const webviewRef = useRef<WebView>(null);
   const [title, setTitle] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -142,11 +144,27 @@ export default function NewNoteScreen() {
   ]);
   const [newCategory, setNewCategory] = useState("");
   const [allNotes, setAllNotes] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [loadedContent, setLoadedContent] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = store["notes"];
-    if (saved) setAllNotes(JSON.parse(saved));
-  }, []);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setAllNotes(parsed);
+      if (noteId) {
+        const existing = parsed.find((n: any) => n.id === noteId);
+        if (existing) {
+          setIsEditing(true);
+          setTitle(existing.title);
+          setCategory(existing.category || "General");
+          setImages(existing.images || []);
+          setLinkedNotes(existing.linkedNotes || []);
+          setLoadedContent(existing.content || "");
+        }
+      }
+    }
+  }, [noteId]);
 
   const pickImage = async (fromCamera = false) => {
     let result;
@@ -187,17 +205,41 @@ export default function NewNoteScreen() {
 
   const onMessage = (event: any) => {
     const html = event.nativeEvent.data;
-    const note = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      content: html,
-      images,
-      category,
-      linkedNotes,
-      createdAt: new Date().toISOString(),
-    };
     const existing = store["notes"] ? JSON.parse(store["notes"]) : [];
-    existing.push(note);
+    if (isEditing && noteId) {
+      const idx = existing.findIndex((n: any) => n.id === noteId);
+      if (idx !== -1) {
+        existing[idx] = {
+          ...existing[idx],
+          title: title.trim(),
+          content: html,
+          images,
+          category,
+          linkedNotes,
+        };
+      } else {
+        existing.push({
+          id: noteId,
+          title: title.trim(),
+          content: html,
+          images,
+          category,
+          linkedNotes,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      const note = {
+        id: Date.now().toString(),
+        title: title.trim(),
+        content: html,
+        images,
+        category,
+        linkedNotes,
+        createdAt: new Date().toISOString(),
+      };
+      existing.push(note);
+    }
     store["notes"] = JSON.stringify(existing);
     router.back();
   };
@@ -544,6 +586,15 @@ export default function NewNoteScreen() {
         scrollEnabled={true}
         javaScriptEnabled={true}
         originWhitelist={["*"]}
+        onLoad={() => {
+          if (loadedContent) {
+            webviewRef.current?.injectJavaScript(`
+              document.getElementById('editor').innerHTML = ${JSON.stringify(loadedContent)};
+              true;
+            `);
+            setLoadedContent(null);
+          }
+        }}
       />
 
       {/* Bottom Bar */}

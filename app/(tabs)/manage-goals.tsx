@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   addButton: {
-    color: '#4ECDC4',
+    color: '#fff',
     fontSize: 17,
     fontWeight: '600',
   },
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#4ECDC4',
+    backgroundColor: '#fff',
     borderRadius: 2,
   },
   emptyContainer: {

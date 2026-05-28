@@ -1,7 +1,7 @@
-// app/summary.tsx – bottom bar raised slightly to avoid system navigation bar
+// app/summary.tsx – using real history data (FIXED)
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Animated,
   Dimensions,
@@ -15,26 +15,28 @@ import {
 } from "react-native";
 import Svg, { G, Path } from "react-native-svg";
 import { shadcn } from "../../constants/components-theme";
+import { getHistoryLogs, HistoryLog } from "../activitiesStore";
 
 const { width: screenWidth } = Dimensions.get("window");
 
-// Activity colors (same as before)
+// Activity colors mapping
 const ACTIVITY_COLORS: Record<string, string> = {
   "Sleep/Rest": "#E8635E",
-  Work: "#96CEB4",
-  University: "#DDA0DD",
-  Hobby: "#4ECDC4",
+  "Work": "#96CEB4",
+  "University": "#DDA0DD",
+  "Hobby": "#fff",
   "Exercises/Health": "#FF6B6B",
   "Personal development": "#FFEAA7",
-  Movies: "#45B7D1",
-  Meditation: "#96CEB4",
-  Book: "#98D8C8",
-  Walk: "#F7B731",
+  "Movies": "#45B7D1",
+  "Meditation": "#96CEB4",
+  "Book": "#98D8C8",
+  "Walk": "#F7B731",
   "Getting ready": "#FF9F4A",
-  Break: "#888888",
-  Study: "#6C5CE7",
-  Dinner: "#FF9F4A",
+  "Break": "#888888",
+  "Study": "#6C5CE7",
+  "Dinner": "#FF9F4A",
   "Free time": "#A8E6CF",
+  "Other": "#6C5CE7",
 };
 
 const formatDuration = (minutes: number): string => {
@@ -48,104 +50,139 @@ const formatDuration = (minutes: number): string => {
 const formatHours = (minutes: number): string =>
   (minutes / 60).toFixed(1) + "h";
 
-// Mock data generators (unchanged)
-const getActivitiesForPeriod = (period: string) => {
-  switch (period) {
-    case "Today":
-      return [
-        { name: "Sleep/Rest", minutes: 480 },
-        { name: "Work", minutes: 270 },
-        { name: "University", minutes: 195 },
-        { name: "Hobby", minutes: 165 },
-        { name: "Exercises/Health", minutes: 120 },
-        { name: "Personal development", minutes: 90 },
-        { name: "Break", minutes: 45 },
-        { name: "Dinner", minutes: 40 },
-        { name: "Free time", minutes: 35 },
-      ];
-    case "Yesterday":
-      return [
-        { name: "Sleep/Rest", minutes: 465 },
-        { name: "Work", minutes: 300 },
-        { name: "Movies", minutes: 210 },
-        { name: "Hobby", minutes: 150 },
-        { name: "University", minutes: 120 },
-        { name: "Meditation", minutes: 60 },
-        { name: "Break", minutes: 30 },
-        { name: "Dinner", minutes: 35 },
-      ];
-    case "7 days":
-      return [
-        { name: "Sleep/Rest", minutes: 3360 },
-        { name: "Work", minutes: 1680 },
-        { name: "University", minutes: 1320 },
-        { name: "Hobby", minutes: 1080 },
-        { name: "Exercises/Health", minutes: 840 },
-        { name: "Personal development", minutes: 720 },
-        { name: "Break", minutes: 420 },
-        { name: "Dinner", minutes: 300 },
-        { name: "Free time", minutes: 360 },
-      ];
-    case "30 days":
-      return [
-        { name: "Sleep/Rest", minutes: 14400 },
-        { name: "Work", minutes: 7200 },
-        { name: "University", minutes: 5760 },
-        { name: "Hobby", minutes: 4680 },
-        { name: "Exercises/Health", minutes: 3600 },
-        { name: "Personal development", minutes: 3240 },
-        { name: "Break", minutes: 1440 },
-        { name: "Dinner", minutes: 1200 },
-        { name: "Free time", minutes: 1680 },
-      ];
-    default:
-      return [];
-  }
+// Get activities from history logs for a specific date range
+const getActivitiesFromHistory = (logs: HistoryLog[]): { name: string; minutes: number }[] => {
+  const activityMap: Record<string, number> = {};
+
+  logs.forEach(log => {
+    if (log.type === 'activity') {
+      const minutes = log.durationMinutes;
+      if (activityMap[log.title]) {
+        activityMap[log.title] += minutes;
+      } else {
+        activityMap[log.title] = minutes;
+      }
+    }
+  });
+
+  // Convert to array and sort by minutes (descending)
+  return Object.entries(activityMap)
+    .map(([name, minutes]) => ({ name, minutes }))
+    .sort((a, b) => b.minutes - a.minutes);
 };
 
-const getPreviousPeriodTotal = (
-  period: string,
-  currentTotal: number,
-): number => {
-  if (period === "Today") {
-    const yesterday = getActivitiesForPeriod("Yesterday");
-    return yesterday.reduce((s, a) => s + a.minutes, 0);
-  }
-  if (period === "Yesterday") {
-    const today = getActivitiesForPeriod("Today");
-    return today.reduce((s, a) => s + a.minutes, 0);
-  }
-  if (period === "7 days") return currentTotal * 0.92;
-  if (period === "30 days") return currentTotal * 0.95;
-  return 0;
-};
-
-const getDateRange = (period: string): string => {
-  const today = new Date();
+// Get date range string
+const getDateRange = (period: string, referenceDate: Date): string => {
   const formatDate = (date: Date) =>
     `${date.getDate()} ${date.toLocaleString("default", { month: "short" })}`;
-  if (period === "Today") return formatDate(today);
+
+  if (period === "Today") return formatDate(referenceDate);
   if (period === "Yesterday") {
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    const yesterday = new Date(referenceDate);
+    yesterday.setDate(referenceDate.getDate() - 1);
     return formatDate(yesterday);
   }
   if (period === "7 days") {
-    const end = new Date(today);
-    const start = new Date(today);
-    start.setDate(today.getDate() - 6);
+    const end = new Date(referenceDate);
+    const start = new Date(referenceDate);
+    start.setDate(referenceDate.getDate() - 6);
     return `${formatDate(start)} – ${formatDate(end)}`;
   }
   if (period === "30 days") {
-    const end = new Date(today);
-    const start = new Date(today);
-    start.setDate(today.getDate() - 29);
+    const end = new Date(referenceDate);
+    const start = new Date(referenceDate);
+    start.setDate(referenceDate.getDate() - 29);
     return `${formatDate(start)} – ${formatDate(end)}`;
   }
   return "";
 };
 
-// Donut Chart – slightly larger (size = screenWidth * 0.52)
+// Filter logs by period
+const filterLogsByPeriod = (logs: HistoryLog[], period: string, referenceDate: Date): HistoryLog[] => {
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const weekAgo = new Date(today);
+  weekAgo.setDate(today.getDate() - 6);
+  weekAgo.setHours(0, 0, 0, 0);
+
+  const monthAgo = new Date(today);
+  monthAgo.setDate(today.getDate() - 29);
+  monthAgo.setHours(0, 0, 0, 0);
+
+  return logs.filter(log => {
+    const logDate = new Date(log.timestamp);
+    logDate.setHours(0, 0, 0, 0);
+    const logTime = logDate.getTime();
+
+    switch (period) {
+      case "Today":
+        return logTime === today.getTime();
+      case "Yesterday":
+        return logTime === yesterday.getTime();
+      case "7 days":
+        return logTime >= weekAgo.getTime() && logTime <= today.getTime();
+      case "30 days":
+        return logTime >= monthAgo.getTime() && logTime <= today.getTime();
+      default:
+        return true;
+    }
+  });
+};
+
+// Calculate total minutes from logs
+const calculateTotalMinutes = (logs: HistoryLog[]): number => {
+  return logs.reduce((sum, log) => sum + log.durationMinutes, 0);
+};
+
+// Calculate total for previous period
+const getPreviousPeriodTotal = (period: string, allLogs: HistoryLog[], referenceDate: Date): number => {
+  const today = new Date(referenceDate);
+  today.setHours(0, 0, 0, 0);
+
+  if (period === "Today") {
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayLogs = filterLogsByPeriod(allLogs, "Yesterday", yesterday);
+    return calculateTotalMinutes(yesterdayLogs);
+  }
+  if (period === "Yesterday") {
+    const todayLogs = filterLogsByPeriod(allLogs, "Today", referenceDate);
+    return calculateTotalMinutes(todayLogs);
+  }
+  if (period === "7 days") {
+    const prevWeekStart = new Date(today);
+    prevWeekStart.setDate(today.getDate() - 13);
+    const prevWeekEnd = new Date(today);
+    prevWeekEnd.setDate(today.getDate() - 7);
+    const prevWeekLogs = allLogs.filter(log => {
+      const logDate = new Date(log.timestamp);
+      logDate.setHours(0, 0, 0, 0);
+      const logTime = logDate.getTime();
+      return logTime >= prevWeekStart.getTime() && logTime < prevWeekEnd.getTime();
+    });
+    return calculateTotalMinutes(prevWeekLogs);
+  }
+  if (period === "30 days") {
+    const prevMonthStart = new Date(today);
+    prevMonthStart.setDate(today.getDate() - 59);
+    const prevMonthEnd = new Date(today);
+    prevMonthEnd.setDate(today.getDate() - 29);
+    const prevMonthLogs = allLogs.filter(log => {
+      const logDate = new Date(log.timestamp);
+      logDate.setHours(0, 0, 0, 0);
+      const logTime = logDate.getTime();
+      return logTime >= prevMonthStart.getTime() && logTime < prevMonthEnd.getTime();
+    });
+    return calculateTotalMinutes(prevMonthLogs);
+  }
+  return 0;
+};
+
+// Donut Chart
 const DonutChart = ({
   activities,
   totalMinutes,
@@ -165,7 +202,16 @@ const DonutChart = ({
       duration: 400,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim]);
+  }, [fadeAnim, activities]);
+
+  // Don't render if no data
+  if (totalMinutes === 0 || activities.length === 0) {
+    return (
+      <View style={styles.noDataChart}>
+        <Text style={styles.noDataChartText}>No data for this period</Text>
+      </View>
+    );
+  }
 
   let startAngle = -Math.PI / 2;
   const slices: { path: string; color: string }[] = [];
@@ -227,7 +273,7 @@ const DonutChart = ({
   );
 };
 
-// Activity item – no background
+// Activity item
 const ActivityItem = ({
   activity,
   totalMinutes,
@@ -236,7 +282,7 @@ const ActivityItem = ({
   totalMinutes: number;
 }) => {
   const color = ACTIVITY_COLORS[activity.name] || "#888888";
-  const percent = ((activity.minutes / totalMinutes) * 100).toFixed(1);
+  const percent = totalMinutes > 0 ? ((activity.minutes / totalMinutes) * 100).toFixed(1) : "0";
   return (
     <View style={styles.activityItem}>
       <View style={styles.activityHeader}>
@@ -267,12 +313,39 @@ const ActivityItem = ({
 export default function SummaryScreen() {
   const router = useRouter();
   const [period, setPeriod] = useState("Today");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [historyLogs, setHistoryLogs] = useState<HistoryLog[]>([]);
 
-  const activities = getActivitiesForPeriod(period);
-  const totalMinutes = activities.reduce((sum, a) => sum + a.minutes, 0);
-  const previousTotal = getPreviousPeriodTotal(period, totalMinutes);
-  const percentChange = ((totalMinutes - previousTotal) / previousTotal) * 100;
-  const dateRange = getDateRange(period);
+  // Load history logs
+  const loadHistory = useCallback(() => {
+    const allLogs = getHistoryLogs();
+    console.log("Total history logs:", allLogs.length);
+    setHistoryLogs(allLogs);
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHistory();
+    }, [loadHistory])
+  );
+
+  // Filter logs based on selected period
+  const filteredLogs = filterLogsByPeriod(historyLogs, period, currentDate);
+  const activities = getActivitiesFromHistory(filteredLogs);
+  const totalMinutes = calculateTotalMinutes(filteredLogs);
+  const previousTotal = getPreviousPeriodTotal(period, historyLogs, currentDate);
+  const percentChange = previousTotal === 0 ? 0 : ((totalMinutes - previousTotal) / previousTotal) * 100;
+  const dateRange = getDateRange(period, currentDate);
+
+  // Debug logging
+  console.log(`Period: ${period}, Total minutes: ${totalMinutes}, Activities: ${activities.length}`);
+
+  // If no data, show empty state
+  const hasData = activities.length > 0 && totalMinutes > 0;
 
   return (
     <View style={styles.container}>
@@ -286,41 +359,59 @@ export default function SummaryScreen() {
           <DonutChart activities={activities} totalMinutes={totalMinutes} />
         </View>
 
-        <View style={styles.trendContainer}>
-          <Ionicons
-            name={percentChange >= 0 ? "trending-up" : "trending-down"}
-            size={14}
-            color={
-              percentChange >= 0
-                ? shadcn.colors.successForeground
-                : shadcn.colors.destructiveForeground
-            }
-          />
-          <Text style={styles.trendText}>
-            {percentChange >= 0 ? "+" : ""}
-            {percentChange.toFixed(1)}% vs previous{" "}
-            {period === "Today" ? "day" : period}
-          </Text>
-        </View>
-        <Text style={styles.footerNote}>
-          {formatDuration(totalMinutes)} across {activities.length} activities
-        </Text>
+        {hasData ? (
+          <>
+            <View style={styles.trendContainer}>
+              <Ionicons
+                name={percentChange >= 0 ? "trending-up" : "trending-down"}
+                size={14}
+                color={
+                  percentChange >= 0
+                    ? shadcn.colors.successForeground
+                    : shadcn.colors.destructiveForeground
+                }
+              />
+              <Text style={styles.trendText}>
+                {percentChange >= 0 ? "+" : ""}
+                {percentChange.toFixed(1)}% vs previous{" "}
+                {period === "Today" ? "day" : period === "Yesterday" ? "day" : period}
+              </Text>
+            </View>
+            <Text style={styles.footerNote}>
+              {formatDuration(totalMinutes)} across {activities.length} activities
+            </Text>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Breakdown</Text>
-        </View>
-        <View style={styles.gridContainer}>
-          {activities.map((act, idx) => (
-            <ActivityItem
-              key={idx}
-              activity={act}
-              totalMinutes={totalMinutes}
-            />
-          ))}
-        </View>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Breakdown</Text>
+            </View>
+            <View style={styles.gridContainer}>
+              {activities.map((act, idx) => (
+                <ActivityItem
+                  key={idx}
+                  activity={act}
+                  totalMinutes={totalMinutes}
+                />
+              ))}
+            </View>
+          </>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="time-outline" size={64} color="#333" />
+            <Text style={styles.emptyTitle}>No Data Available</Text>
+            <Text style={styles.emptyText}>
+              Complete some activities or add history entries to see your summary.
+            </Text>
+            <TouchableOpacity
+              style={styles.goToHistoryButton}
+              onPress={() => router.push("/history")}
+            >
+              <Text style={styles.goToHistoryText}>Go to History →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
-      {/* Bottom bar – raised slightly (bottom: 12) */}
+      {/* Bottom bar */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarRow}>
           <View style={{ width: 40 }} />
@@ -367,13 +458,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: Platform.OS === "ios" ? 40 : 20,
-    paddingBottom: 100, // increased to give space above raised bottom bar
+    paddingBottom: 100,
   },
   chartWrapper: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 30, // adds space at the top
-    marginBottom: 20, // keep bottom spacing as before
+    marginTop: 30,
+    marginBottom: 20,
   },
   donutCenterLabel: {
     position: "absolute",
@@ -391,6 +482,20 @@ const styles = StyleSheet.create({
     color: shadcn.colors.mutedForeground,
     fontSize: 9,
     marginTop: 2,
+  },
+  noDataChart: {
+    width: screenWidth * 0.65,
+    height: screenWidth * 0.65,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: shadcn.colors.card,
+    borderRadius: screenWidth * 0.325,
+  },
+  noDataChartText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 14,
+    textAlign: "center",
+    padding: 20,
   },
   trendContainer: {
     flexDirection: "row",
@@ -474,7 +579,7 @@ const styles = StyleSheet.create({
   },
   bottomBar: {
     position: "absolute",
-    bottom: 12, // raised from bottom edge
+    bottom: 12,
     left: 0,
     right: 0,
     backgroundColor: shadcn.colors.background,
@@ -530,5 +635,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+  },
+  emptyTitle: {
+    color: shadcn.colors.foreground,
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 40,
+  },
+  goToHistoryButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: shadcn.colors.card,
+    borderRadius: 10,
+    borderWidth: 0.5,
+    borderColor: shadcn.colors.border,
+  },
+  goToHistoryText: {
+    color: shadcn.colors.foreground,
+    fontSize: 15,
+    fontWeight: "500",
   },
 });

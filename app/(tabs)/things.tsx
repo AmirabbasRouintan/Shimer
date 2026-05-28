@@ -1,7 +1,7 @@
 // app/things.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Alert,
   FlatList,
@@ -12,11 +12,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Animated,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
-import { getActivities, setActivities, subscribe, Activity, setActiveTimer, getActiveTimer } from "../activitiesStore";
-
+import CustomAlert from "../components/CustomAlert";
+import { getActivities, setActivities, subscribe, Activity, setActiveTimer, getActiveTimer, setPendingPauseActivity, clearPendingPauseActivity, getPreBreakTimerData, clearPreBreakTimerData } from "../activitiesStore";
 
 const iconOptions = [
   "folder-outline",
@@ -41,13 +42,94 @@ const iconOptions = [
   "calendar-outline",
   "time-outline",
   "star-outline",
-  "flame-outline"
+  "flame-outline",
 ];
 
 const colorOptions = [
-  "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD",
-  "#98D8C8", "#F7B731", "#FF9F4A", "#E8635E", "#6C5CE7", "#A8E6CF"
+  "#FF6B6B", "#fff", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD",
+  "#98D8C8", "#F7B731", "#FF9F4A", "#E8635E", "#6C5CE7", "#A8E6CF",
 ];
+
+// Custom Apple-style Alert Modal Component
+
+// Apple-style Scroll Wheel Picker Component with Fade Overlays
+const WheelPicker = ({ value, onValueChange, min, max }: { value: number; onValueChange: (val: number) => void; min: number; max: number }) => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const itemHeight = 44;
+  const visibleItems = 3;
+  const items = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+  const [selectedIndex, setSelectedIndex] = useState(value - min);
+
+  const handleScroll = (event: any) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / itemHeight);
+    const newIndex = Math.max(0, Math.min(index, items.length - 1));
+    if (newIndex !== selectedIndex) {
+      setSelectedIndex(newIndex);
+      onValueChange(items[newIndex]);
+    }
+  };
+
+  const scrollToIndex = (index: number) => {
+    scrollViewRef.current?.scrollTo({
+      y: index * itemHeight,
+      animated: true,
+    });
+  };
+
+  useEffect(() => {
+    const initialIndex = items.findIndex(i => i === value);
+    if (initialIndex !== -1 && initialIndex !== selectedIndex) {
+      setSelectedIndex(initialIndex);
+      scrollToIndex(initialIndex);
+    }
+  }, [value]);
+
+  return (
+    <View style={styles.wheelPickerContainer}>
+      <View style={styles.wheelPickerWrapper}>
+        {/* Top Fade Overlay */}
+        <View style={styles.wheelPickerFadeTop} pointerEvents="none" />
+        {/* Bottom Fade Overlay */}
+        <View style={styles.wheelPickerFadeBottom} pointerEvents="none" />
+        {/* Selection Indicator */}
+        <View style={styles.wheelPickerSelectedIndicator} />
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.wheelPickerScroll}
+          showsVerticalScrollIndicator={false}
+          snapToInterval={itemHeight}
+          decelerationRate="fast"
+          onMomentumScrollEnd={handleScroll}
+          onScrollEndDrag={handleScroll}
+          contentContainerStyle={{ paddingVertical: ((visibleItems - 1) / 2) * itemHeight }}
+        >
+          {items.map((item, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={[styles.wheelPickerItem, { height: itemHeight }]}
+              onPress={() => {
+                setSelectedIndex(idx);
+                onValueChange(item);
+                scrollToIndex(idx);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.wheelPickerItemText,
+                  selectedIndex === idx && styles.wheelPickerItemTextSelected,
+                ]}
+              >
+                {item.toString().padStart(2, "0")}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
+};
 
 export default function ThingsScreen() {
   const router = useRouter();
@@ -66,6 +148,11 @@ export default function ThingsScreen() {
   const [selectedActivityColor, setSelectedActivityColor] = useState<string>("");
   const [timerHours, setTimerHours] = useState(0);
   const [timerMinutes, setTimerMinutes] = useState(0);
+
+  // Custom Alert States
+  const [showReplaceAlert, setShowReplaceAlert] = useState(false);
+  const [showInvalidAlert, setShowInvalidAlert] = useState(false);
+  const [pendingTimerData, setPendingTimerData] = useState<{ activityName: string; activityColor: string; durationSeconds: number } | null>(null);
 
   // Subscribe to global store changes
   useEffect(() => {
@@ -100,7 +187,7 @@ export default function ThingsScreen() {
       goals: "",
       timerHints: "",
       checklists: [],
-      shortcuts: []
+      shortcuts: [],
     };
     setActivities([...current, newActivity]);
     setNewActivityName("");
@@ -116,10 +203,18 @@ export default function ThingsScreen() {
     if (activity) return activity.color;
 
     const colorMap: Record<string, string> = {
-      University: "#DDA0DD", Book: "#98D8C8", Movies: "#45B7D1", Meditation: "#96CEB4",
-      Work: "#96CEB4", Hobby: "#4ECDC4", "Personal development": "#FFEAA7",
-      "Exercises/Health": "#FF6B6B", Walk: "#F7B731", "Getting ready": "#FF9F4A",
-      "Sleep/Rest": "#E8635E", Other: "#6C5CE7"
+      University: "#DDA0DD",
+      Book: "#98D8C8",
+      Movies: "#45B7D1",
+      Meditation: "#96CEB4",
+      Work: "#96CEB4",
+      Hobby: "#fff",
+      "Personal development": "#FFEAA7",
+      "Exercises/Health": "#FF6B6B",
+      Walk: "#F7B731",
+      "Getting ready": "#FF9F4A",
+      "Sleep/Rest": "#E8635E",
+      Other: "#6C5CE7",
     };
     return colorMap[activityName] || "#6C5CE7";
   };
@@ -130,10 +225,17 @@ export default function ThingsScreen() {
     if (activity) return activity.icon;
 
     const iconMap: Record<string, string> = {
-      University: "school-outline", Book: "book-outline", Movies: "film-outline",
-      Meditation: "leaf-outline", Work: "briefcase-outline", Hobby: "heart-outline",
-      "Personal development": "star-outline", "Exercises/Health": "fitness-outline",
-      Walk: "walk-outline", "Getting ready": "bed-outline", "Sleep/Rest": "bed-outline"
+      University: "school-outline",
+      Book: "book-outline",
+      Movies: "film-outline",
+      Meditation: "leaf-outline",
+      Work: "briefcase-outline",
+      Hobby: "heart-outline",
+      "Personal development": "star-outline",
+      "Exercises/Health": "fitness-outline",
+      Walk: "walk-outline",
+      "Getting ready": "bed-outline",
+      "Sleep/Rest": "bed-outline",
     };
     return iconMap[activityName] || "folder-outline";
   };
@@ -146,47 +248,67 @@ export default function ThingsScreen() {
     setShowTimerPicker(true);
   };
 
-  // In things.tsx, update the handleTimerConfirm function:
+  const startNewTimer = () => {
+    if (!pendingTimerData) return;
+
+    setActiveTimer({
+      activityName: pendingTimerData.activityName,
+      activityColor: pendingTimerData.activityColor,
+      durationSeconds: pendingTimerData.durationSeconds,
+      startTime: Date.now(),
+      userSelectedDuration: pendingTimerData.durationSeconds,
+    });
+    setShowTimerPicker(false);
+    setSelectedActivity(null);
+    setShowReplaceAlert(false);
+    setPendingTimerData(null);
+    router.replace("/");
+  };
+
+  const handlePauseAndStart = () => {
+    if (!pendingTimerData) return;
+
+    // Use pre-break timer data first (break interval overwrites activeTimerData with 'Break')
+    const preBreak = getPreBreakTimerData();
+    const currentTimer = preBreak || getActiveTimer();
+
+    if (currentTimer && currentTimer.activityName !== 'Break') {
+      setPendingPauseActivity({
+        name: currentTimer.activityName,
+        color: currentTimer.activityColor,
+        remainingSeconds: currentTimer.durationSeconds,
+        userDuration: (currentTimer as any).userSelectedDuration,
+      });
+      clearPreBreakTimerData();
+    }
+
+    startNewTimer();
+  };
 
   const handleTimerConfirm = () => {
     const totalMinutes = timerHours * 60 + timerMinutes;
     if (totalMinutes === 0) {
-      Alert.alert("Invalid Time", "Please set a timer duration.");
+      setShowInvalidAlert(true);
       return;
     }
 
     const durationSeconds = totalMinutes * 60;
     const activeTimer = getActiveTimer();
 
-    if (activeTimer) {
-      Alert.alert(
-        "Timer Already Running",
-        `"${activeTimer.activityName}" is currently running. Starting a new activity will replace it. Continue?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Replace",
-            style: "destructive",
-            onPress: () => {
-              setActiveTimer({
-                activityName: selectedActivity || "",
-                activityColor: selectedActivityColor,
-                durationSeconds: durationSeconds,
-                startTime: Date.now(), // Add start time
-              });
-              setShowTimerPicker(false);
-              setSelectedActivity(null);
-              router.replace("/");
-            }
-          }
-        ]
-      );
+    if (activeTimer && activeTimer.activityName !== 'Break') {
+      setPendingTimerData({
+        activityName: selectedActivity || "",
+        activityColor: selectedActivityColor,
+        durationSeconds: durationSeconds,
+      });
+      setShowReplaceAlert(true);
     } else {
       setActiveTimer({
         activityName: selectedActivity || "",
         activityColor: selectedActivityColor,
         durationSeconds: durationSeconds,
-        startTime: Date.now(), // Add start time
+        startTime: Date.now(),
+        userSelectedDuration: durationSeconds,
       });
       setShowTimerPicker(false);
       setSelectedActivity(null);
@@ -194,10 +316,28 @@ export default function ThingsScreen() {
     }
   };
 
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-  const minutes = Array.from({ length: 60 }, (_, i) => i);
+  const presets = [
+    { label: "5m", mins: 5 },
+    { label: "10m", mins: 10 },
+    { label: "15m", mins: 15 },
+    { label: "25m", mins: 25 },
+    { label: "30m", mins: 30 },
+    { label: "45m", mins: 45 },
+    { label: "1h", mins: 60 },
+    { label: "1.5h", mins: 90 },
+    { label: "2h", mins: 120 },
+  ];
 
-  const formatNumber = (num: number) => num.toString().padStart(2, '0');
+  const totalTimeDisplay = () => {
+    const total = timerHours * 3600 + timerMinutes * 60;
+    if (total === 0) return "0:00";
+    const hours = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, "0")}`;
+    }
+    return `${mins}:00`;
+  };
 
   return (
     <View style={styles.container}>
@@ -220,7 +360,7 @@ export default function ThingsScreen() {
             onLongPress={() =>
               router.push({
                 pathname: "/edit-activity-page",
-                params: { name: item }
+                params: { name: item },
               })
             }
           >
@@ -266,132 +406,95 @@ export default function ThingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Timer Picker Modal */}
+      {/* Apple Dark Style Timer Picker Modal */}
       <Modal visible={showTimerPicker} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.timerModalContent}>
-            <View style={styles.timerModalHeader}>
+          <View style={styles.appleTimerModal}>
+            {/* Header */}
+            <View style={styles.appleTimerHeader}>
               <TouchableOpacity onPress={() => setShowTimerPicker(false)}>
-                <Text style={styles.timerCancelText}>Cancel</Text>
+                <Text style={styles.appleTimerCancel}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.timerTitle}>Set Timer</Text>
+              <Text style={styles.appleTimerTitle}>Set Timer</Text>
               <TouchableOpacity onPress={handleTimerConfirm}>
-                <Text style={styles.timerDoneText}>Start</Text>
+                <Text style={styles.appleTimerStart}>Start</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.selectedActivityRow}>
-              <View style={[styles.selectedActivityDot, { backgroundColor: selectedActivityColor }]} />
-              <Text style={styles.selectedActivityText}>
-                {selectedActivity}
-              </Text>
+            {/* Selected Activity */}
+            <View style={styles.appleActivityContainer}>
+              <View style={[styles.appleActivityDot, { backgroundColor: selectedActivityColor }]} />
+              <Text style={styles.appleActivityName}>{selectedActivity}</Text>
             </View>
 
-            <View style={styles.timerPickerRow}>
-              {/* Hours Picker */}
-              <View style={styles.pickerContainer}>
-                <Text style={styles.pickerLabel}>Hours</Text>
-                <View style={styles.pickerScroller}>
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.pickerScrollContent}
-                  >
-                    {hours.map((hour) => (
-                      <TouchableOpacity
-                        key={hour}
-                        style={[
-                          styles.pickerItem,
-                          timerHours === hour && styles.pickerItemSelected,
-                        ]}
-                        onPress={() => setTimerHours(hour)}
-                      >
-                        <Text
-                          style={[
-                            styles.pickerItemText,
-                            timerHours === hour && styles.pickerItemTextSelected,
-                          ]}
-                        >
-                          {formatNumber(hour)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-
-              <Text style={styles.timerSeparator}>:</Text>
-
-              {/* Minutes Picker */}
-              <View style={styles.pickerContainer}>
-                <Text style={styles.pickerLabel}>Minutes</Text>
-                <View style={styles.pickerScroller}>
-                  <ScrollView
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.pickerScrollContent}
-                  >
-                    {minutes.map((minute) => (
-                      <TouchableOpacity
-                        key={minute}
-                        style={[
-                          styles.pickerItem,
-                          timerMinutes === minute && styles.pickerItemSelected,
-                        ]}
-                        onPress={() => setTimerMinutes(minute)}
-                      >
-                        <Text
-                          style={[
-                            styles.pickerItemText,
-                            timerMinutes === minute && styles.pickerItemTextSelected,
-                          ]}
-                        >
-                          {formatNumber(minute)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
+            {/* Time Display */}
+            <View style={styles.appleTimeDisplay}>
+              <Text style={styles.appleTimeDisplayText}>{totalTimeDisplay()}</Text>
             </View>
 
-            <View style={styles.presetTimes}>
-              <Text style={styles.presetLabel}>Quick Select</Text>
-              <View style={styles.presetRow}>
-                {[
-                  { label: "5m", mins: 5 },
-                  { label: "10m", mins: 10 },
-                  { label: "15m", mins: 15 },
-                  { label: "25m", mins: 25 },
-                  { label: "30m", mins: 30 },
-                  { label: "45m", mins: 45 },
-                  { label: "1h", mins: 60 },
-                  { label: "1.5h", mins: 90 },
-                  { label: "2h", mins: 120 },
-                ].map((preset) => (
-                  <TouchableOpacity
-                    key={preset.mins}
-                    style={[
-                      styles.presetChip,
-                      timerMinutes === (preset.mins % 60) &&
-                      timerHours === Math.floor(preset.mins / 60) &&
-                      styles.presetChipSelected,
-                    ]}
-                    onPress={() => {
-                      setTimerHours(Math.floor(preset.mins / 60));
-                      setTimerMinutes(preset.mins % 60);
-                    }}
-                  >
-                    <Text
+            {/* Divider */}
+            <View style={styles.appleDivider} />
+
+            {/* Wheel Pickers */}
+            <View style={styles.appleWheelContainer}>
+              <WheelPicker
+                value={timerHours}
+                onValueChange={setTimerHours}
+                min={0}
+                max={23}
+              />
+              <Text style={styles.wheelPickerColon}>:</Text>
+              <WheelPicker
+                value={timerMinutes}
+                onValueChange={setTimerMinutes}
+                min={0}
+                max={59}
+              />
+            </View>
+
+            {/* Divider */}
+            <View style={styles.appleDivider} />
+
+            {/* Preset Buttons with Fade Effects */}
+            <View style={styles.applePresetsWrapper}>
+              <View style={styles.presetsContainer}>
+                {/* Left Fade Overlay */}
+                <View style={styles.presetsFadeLeft} pointerEvents="none" />
+                {/* Right Fade Overlay */}
+                <View style={styles.presetsFadeRight} pointerEvents="none" />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.applePresetsScroll}
+                  contentContainerStyle={styles.applePresetsContainer}
+                >
+                  {presets.map((preset) => (
+                    <TouchableOpacity
+                      key={preset.mins}
                       style={[
-                        styles.presetChipText,
-                        timerMinutes === (preset.mins % 60) &&
+                        styles.applePresetButton,
                         timerHours === Math.floor(preset.mins / 60) &&
-                        styles.presetChipTextSelected,
+                        timerMinutes === preset.mins % 60 &&
+                        styles.applePresetButtonSelected,
                       ]}
+                      onPress={() => {
+                        setTimerHours(Math.floor(preset.mins / 60));
+                        setTimerMinutes(preset.mins % 60);
+                      }}
                     >
-                      {preset.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.applePresetButtonText,
+                          timerHours === Math.floor(preset.mins / 60) &&
+                          timerMinutes === preset.mins % 60 &&
+                          styles.applePresetButtonTextSelected,
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
             </View>
           </View>
@@ -450,7 +553,7 @@ export default function ThingsScreen() {
             <FlatList
               data={iconOptions}
               numColumns={4}
-              keyExtractor={item => item}
+              keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[styles.iconItem, selectedIcon === item && styles.iconItemSelected]}
@@ -459,7 +562,11 @@ export default function ThingsScreen() {
                     setShowIconPicker(false);
                   }}
                 >
-                  <Ionicons name={item as any} size={32} color={selectedIcon === item ? shadcn.colors.foreground : shadcn.colors.mutedForeground} />
+                  <Ionicons
+                    name={item as any}
+                    size={32}
+                    color={selectedIcon === item ? shadcn.colors.foreground : shadcn.colors.mutedForeground}
+                  />
                 </TouchableOpacity>
               )}
             />
@@ -475,7 +582,7 @@ export default function ThingsScreen() {
             <FlatList
               data={colorOptions}
               numColumns={3}
-              keyExtractor={item => item}
+              keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[styles.colorItem, { backgroundColor: item }, selectedColor === item && styles.colorItemSelected]}
@@ -491,7 +598,33 @@ export default function ThingsScreen() {
           </View>
         </View>
       </Modal>
-    </View >
+
+      {/* Custom Replace Alert */}
+      <CustomAlert
+        visible={showReplaceAlert}
+        title="Timer Already Running"
+        message={`"${getActiveTimer()?.activityName}" is currently running.`}
+        onConfirm={startNewTimer}
+        onCancel={() => {
+          setShowReplaceAlert(false);
+          setPendingTimerData(null);
+        }}
+        confirmText="Replace"
+        cancelText="Cancel"
+        thirdButtonText="Pause & Start"
+        onThirdButton={handlePauseAndStart}
+      />
+
+      {/* Custom Invalid Time Alert */}
+      <CustomAlert
+        visible={showInvalidAlert}
+        title="Invalid Time"
+        message="Please set a timer duration before starting."
+        onConfirm={() => setShowInvalidAlert(false)}
+        confirmText="OK"
+        singleButton={true}
+      />
+    </View>
   );
 }
 
@@ -502,26 +635,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 12
+    paddingBottom: 12,
   },
   headerLeft: {
     width: 60,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   headerCenter: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerRight: {
     width: 60,
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   headerTitle: {
     color: shadcn.colors.foreground,
     fontSize: 20,
-    fontWeight: "600"
+    fontWeight: "600",
   },
-  list: { flex: 1, paddingHorizontal: 16, marginTop: 23, },
+  list: { flex: 1, paddingHorizontal: 16, marginTop: 23 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -529,7 +662,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     backgroundColor: shadcn.colors.card,
     borderRadius: shadcn.radius.lg,
-    marginBottom: 8
+    marginBottom: 8,
   },
   colorIndicator: { width: 10, height: 25, borderRadius: 10, marginRight: 20 },
   rowIcon: { marginRight: 8 },
@@ -540,7 +673,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 5,
     margin: 10,
-    borderTopColor: shadcn.colors.border
   },
   bottomLeft: { flexDirection: "row", gap: 24 },
   bottomTab: { flexDirection: "row", alignItems: "center", gap: 4 },
@@ -550,19 +682,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.8)",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
   },
   modalContent: {
     backgroundColor: shadcn.colors.card,
     borderRadius: shadcn.radius.lg,
     padding: 24,
-    width: "80%"
+    width: "80%",
   },
   modalTitle: {
     color: shadcn.colors.foreground,
     fontSize: 18,
     fontWeight: "600",
-    marginBottom: 16
+    marginBottom: 16,
   },
   input: {
     color: shadcn.colors.foreground,
@@ -571,7 +703,7 @@ const styles = StyleSheet.create({
     borderRadius: shadcn.radius.md,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: shadcn.colors.border
+    borderColor: shadcn.colors.border,
   },
   optionRow: {
     flexDirection: "row",
@@ -579,7 +711,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: shadcn.colors.border
+    borderBottomColor: shadcn.colors.border,
   },
   optionText: { color: shadcn.colors.foreground, flex: 1, fontSize: 16 },
   colorPreview: { width: 24, height: 24, borderRadius: 12 },
@@ -589,13 +721,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: shadcn.colors.border
+    borderBottomColor: shadcn.colors.border,
   },
   modalButtons: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 12,
-    marginTop: 24
+    marginTop: 24,
   },
   cancelBtn: { padding: 12 },
   cancelBtnText: { color: shadcn.colors.mutedForeground, fontSize: 16 },
@@ -603,12 +735,12 @@ const styles = StyleSheet.create({
     backgroundColor: shadcn.colors.brand,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: shadcn.radius.md
+    borderRadius: shadcn.radius.md,
   },
   saveBtnText: {
     color: shadcn.colors.brandForeground,
     fontWeight: "700",
-    fontSize: 16
+    fontSize: 16,
   },
   iconItem: {
     flex: 1,
@@ -616,7 +748,7 @@ const styles = StyleSheet.create({
     padding: 12,
     margin: 4,
     backgroundColor: shadcn.colors.card,
-    borderRadius: shadcn.radius.md
+    borderRadius: shadcn.radius.md,
   },
   iconItemSelected: { backgroundColor: shadcn.colors.accent },
   colorItem: {
@@ -625,110 +757,192 @@ const styles = StyleSheet.create({
     margin: 6,
     borderRadius: 20,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
   },
   colorItemSelected: { borderWidth: 2, borderColor: shadcn.colors.foreground },
 
-  // Timer Picker Styles
-  timerModalContent: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 20,
-    padding: 24,
-    width: '90%',
+  // Apple Dark Style Timer Modal Styles
+  appleTimerModal: {
+    backgroundColor: "#0f0f11",
+    borderRadius: 14,
+    padding: 0,
+    width: "90%",
     maxWidth: 400,
+    overflow: "hidden",
   },
-  timerModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+  appleTimerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#38383a",
   },
-  timerCancelText: { color: '#888', fontSize: 16 },
-  timerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  timerDoneText: { color: '#4ECDC4', fontSize: 16, fontWeight: '600' },
-  selectedActivityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  appleTimerCancel: {
+    color: "#ff3b30",
+    fontSize: 17,
+    fontWeight: "500",
+  },
+  appleTimerTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  appleTimerStart: {
+    color: "#007aff",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  appleActivityContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    marginBottom: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: "#1c1c1e",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 10,
   },
-  selectedActivityDot: {
+  appleActivityDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
   },
-  selectedActivityText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
+  appleActivityName: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "500",
   },
-  timerPickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 24,
+  appleTimeDisplay: {
+    alignItems: "center",
+    paddingVertical: 20,
   },
-  pickerContainer: { flex: 1, alignItems: 'center' },
-  pickerLabel: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
+  appleTimeDisplayText: {
+    color: "#fff",
+    fontSize: 52,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
-  pickerScroller: {
-    height: 180,
-    width: '100%',
-    backgroundColor: '#0a0a0a',
-    borderRadius: 12,
-    overflow: 'hidden',
+  appleDivider: {
+    height: 0.5,
+    backgroundColor: "#38383a",
+    marginHorizontal: 16,
   },
-  pickerScrollContent: { paddingVertical: 60 },
-  pickerItem: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginVertical: 2,
-    borderRadius: 8,
-    marginHorizontal: 8,
-  },
-  pickerItemSelected: { backgroundColor: 'rgba(78,205,196,0.15)' },
-  pickerItemText: { color: '#555', fontSize: 24, fontWeight: '500' },
-  pickerItemTextSelected: { color: '#4ECDC4', fontWeight: '700', fontSize: 28 },
-  timerSeparator: { color: '#fff', fontSize: 32, fontWeight: '300', marginTop: 20 },
-  presetTimes: {
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
-    paddingTop: 16,
-  },
-  presetLabel: {
-    color: '#888',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  appleWheelContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
     gap: 8,
   },
-  presetChip: {
-    paddingHorizontal: 14,
+  wheelPickerContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  wheelPickerWrapper: {
+    height: 132,
+    width: "90%",
+    position: "relative",
+    overflow: "hidden",
+  },
+  wheelPickerScroll: {
+    height: 132,
+    width: "100%",
+  },
+  wheelPickerFadeTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 45,
+    backgroundColor: "rgba(15,15,17,0.95)",
+    zIndex: 10,
+  },
+  wheelPickerFadeBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 45,
+    backgroundColor: "rgba(15,15,17,0.95)",
+    zIndex: 10,
+  },
+  wheelPickerSelectedIndicator: {
+    position: "absolute",
+    top: 44,
+    left: 0,
+    right: 0,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "rgba(100,100,110,0.1)",
+    borderTopWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.08)",
+    zIndex: 5,
+  },
+  wheelPickerItem: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  wheelPickerItemText: {
+    color: "#555",
+    fontSize: 20,
+    fontWeight: "500",
+  },
+  wheelPickerItemTextSelected: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  wheelPickerColon: {
+    color: "#fff",
+    fontSize: 32,
+    fontWeight: "300",
+    marginBottom: 16,
+  },
+  applePresetsWrapper: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopColor: "#38383a",
+  },
+  presetsContainer: {
+    position: "relative",
+  },
+  presetsFadeLeft: {
+    display: "none",
+  },
+  presetsFadeRight: {
+    display: "none",
+  },
+  applePresetsScroll: {
+    marginHorizontal: -4,
+  },
+  applePresetsContainer: {
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  applePresetButton: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#0a0a0a',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    backgroundColor: "#1c1c1e",
+    marginRight: 8,
   },
-  presetChipSelected: {
-    backgroundColor: 'rgba(78,205,196,0.15)',
-    borderColor: '#4ECDC4',
+  applePresetButtonSelected: {
+    backgroundColor: "#007aff",
   },
-  presetChipText: { color: '#888', fontSize: 13, fontWeight: '500' },
-  presetChipTextSelected: { color: '#4ECDC4', fontWeight: '600' },
+  applePresetButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  applePresetButtonTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
 });

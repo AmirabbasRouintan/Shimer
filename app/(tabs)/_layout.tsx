@@ -83,6 +83,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
 
   const isThingsActive = pathname === '/things';
   const isSettingsActive = pathname === '/settings';
+  const isIndexPage = pathname === '/' || pathname === '/index';
 
   const handleClockPress = () => {
     if (pathname === '/' || pathname === '/index') {
@@ -93,7 +94,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
   };
 
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, isIndexPage && styles.tabBarTransparent]}>
       {/* Things Tab */}
       <TouchableOpacity
         onPress={() => navigation.navigate('things')}
@@ -157,6 +158,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 0,
+  },
+  tabBarTransparent: {
+    backgroundColor: 'transparent',
   },
   tabItem: {
     flex: 1,

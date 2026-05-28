@@ -23,7 +23,7 @@ const ACTIVITY_COLORS: Record<string, string> = {
   "Sleep/Rest": "#E8635E",
   Work: "#96CEB4",
   University: "#DDA0DD",
-  Hobby: "#4ECDC4",
+  Hobby: "#fff",
   "Exercises/Health": "#FF6B6B",
   "Personal development": "#FFEAA7",
   Movies: "#45B7D1",

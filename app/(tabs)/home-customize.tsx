@@ -1,20 +1,21 @@
 // app/home-customize.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions,
   Modal, TextInput, ScrollView,
-  FlatList, Switch, Alert,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import DragList from 'react-native-draglist';
-import { getChecklists, setSelectedChecklistIndex, getSelectedChecklistIndex, getShowChecklistOnHome, setShowChecklistOnHome, getGoals, setGoals, addGoal, updateGoal, deleteGoal, subscribe, Goal } from '../activitiesStore';
+import { getChecklists, setSelectedChecklistIndex, getSelectedChecklistIndex, getGoals, setGoals, updateGoal, deleteGoal, subscribe, Goal, getMaxPausedActivities, setMaxPausedActivities } from '../activitiesStore';
+import CustomAlert from '../components/CustomAlert';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const GOAL_COLORS = [
-  '#4ECDC4', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1',
+  '#fff', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1',
   '#96CEB4', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7',
 ];
 const GOAL_HEIGHT = 28;
@@ -28,12 +29,19 @@ export default function HomeCustomizeScreen() {
   const [showChecklistModal, setShowChecklistModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [availableChecklists, setAvailableChecklists] = useState<{ title: string; icon: string; index: number }[]>([]);
-  const [showChecklistOnHome, setShowChecklistOnHomeState] = useState(getShowChecklistOnHome());
+  const [maxPaused, setMaxPaused] = useState(getMaxPausedActivities());
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertConfirmText, setAlertConfirmText] = useState('OK');
+  const [alertOnConfirm, setAlertOnConfirm] = useState<() => void>(() => {});
+  const [alertDeleteVisible, setAlertDeleteVisible] = useState(false);
+  const [deleteGoalTitle, setDeleteGoalTitle] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       loadChecklists();
-      setShowChecklistOnHomeState(getShowChecklistOnHome());
+      setMaxPaused(getMaxPausedActivities());
       setGoalsState(getGoals());
     }, [])
   );
@@ -41,7 +49,7 @@ export default function HomeCustomizeScreen() {
   useEffect(() => {
     const unsubscribe = subscribe(() => {
       loadChecklists();
-      setShowChecklistOnHomeState(getShowChecklistOnHome());
+      setMaxPaused(getMaxPausedActivities());
       setGoalsState(getGoals());
     });
     return unsubscribe;
@@ -61,15 +69,14 @@ export default function HomeCustomizeScreen() {
     setGoals(newGoals);
   };
 
-  const toggleChecklistOnHome = (value: boolean) => {
-    setShowChecklistOnHomeState(value);
-    setShowChecklistOnHome(value);
-  };
-
   const handleEditGoal = () => {
     if (!editingGoal) return;
     if (!editingGoal.title.trim()) {
-      Alert.alert('Required', 'Please enter a goal title');
+      setAlertTitle('Required');
+      setAlertMessage('Please enter a goal title');
+      setAlertConfirmText('OK');
+      setAlertOnConfirm(() => () => setAlertVisible(false));
+      setAlertVisible(true);
       return;
     }
     updateGoal(editingGoal.id, editingGoal);
@@ -80,31 +87,33 @@ export default function HomeCustomizeScreen() {
 
   const handleDeleteGoal = () => {
     if (!editingGoal) return;
-    Alert.alert('Delete Goal', `Delete "${editingGoal.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: () => {
-          deleteGoal(editingGoal.id);
-          setGoalsState(getGoals());
-          setShowEditModal(false);
-          setEditingGoal(null);
-        }
-      }
-    ]);
+    setDeleteGoalTitle(editingGoal.title);
+    setAlertDeleteVisible(true);
+  };
+
+  const confirmDeleteGoal = () => {
+    if (!editingGoal) return;
+    deleteGoal(editingGoal.id);
+    setGoalsState(getGoals());
+    setShowEditModal(false);
+    setEditingGoal(null);
+    setAlertDeleteVisible(false);
   };
 
   const handleSelectChecklist = (index: number) => {
     setSelectedChecklistIndex(index);
-    const selectedTitle = availableChecklists[index]?.title || 'Unknown';
-    if (!showChecklistOnHome) {
-      toggleChecklistOnHome(true);
+    if (index === -1) {
+      setAlertTitle('Checklist Hidden');
+      setAlertMessage('No checklist will appear on your home screen.');
+      setAlertOnConfirm(() => () => setAlertVisible(false));
+    } else {
+      const selectedTitle = availableChecklists[index]?.title || 'Unknown';
+      setAlertTitle('Checklist Selected');
+      setAlertMessage(`"${selectedTitle}" will appear on your home screen.`);
+      setAlertOnConfirm(() => () => setAlertVisible(false));
     }
-    Alert.alert(
-      "Checklist Selected",
-      `"${selectedTitle}" will appear on your home screen.`,
-      [{ text: "OK" }]
-    );
+    setAlertConfirmText('OK');
+    setAlertVisible(true);
     setShowChecklistModal(false);
   };
 
@@ -174,54 +183,62 @@ export default function HomeCustomizeScreen() {
 
       <View style={styles.content}>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Checklist Section - Top */}
-          <View style={styles.checklistSection}>
-            <View style={styles.checklistToggleRow}>
-              <View style={styles.checklistToggleLeft}>
-                <Ionicons name="checkbox-outline" size={22} color="#fff" />
-                <Text style={styles.checklistToggleText}>Show Checklist on Home</Text>
-              </View>
-              <Switch
-                value={showChecklistOnHome}
-                onValueChange={toggleChecklistOnHome}
-                trackColor={{ false: '#333', true: '#fff' }}
-                thumbColor={showChecklistOnHome ? '#fff' : '#888'}
-              />
-            </View>
+          {/* Checklist Section */}
+          <View style={styles.sectionHeaderContainer}>
+            <Ionicons name="list-outline" size={16} color="#fff" />
+            <Text style={styles.sectionHeader}>CHECKLIST</Text>
+          </View>
+          <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { loadChecklists(); setShowChecklistModal(true); }}>
+            <Ionicons name="checkbox-outline" size={22} color="#a3a3a3" />
+            <Text style={styles.rowText}>Checklist</Text>
+            <Text style={styles.rowValue}>{getSelectedChecklistIndex() === -1 ? "None" : (availableChecklists[getSelectedChecklistIndex()]?.title || "None")}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#a3a3a3" />
+          </TouchableOpacity>
 
-            {showChecklistOnHome && (
+          {availableChecklists.length === 0 && (
+            <View style={styles.emptyChecklist}>
+              <Ionicons name="checkbox-outline" size={24} color="#555" />
+              <Text style={styles.emptyChecklistText}>
+                No checklists available. Create one from Settings → New Checklist.
+              </Text>
               <TouchableOpacity
-                style={styles.checklistSelectButton}
-                onPress={() => {
-                  loadChecklists();
-                  setShowChecklistModal(true);
-                }}
+                style={styles.createChecklistLink}
+                onPress={() => router.push('/new-checklist')}
               >
-                <Ionicons name="list-outline" size={20} color="#fff" />
-                <Text style={styles.checklistSelectText}>Select Checklist</Text>
-                <View style={styles.currentSelectionContainer}>
-                  <Text style={styles.currentSelectionValue}>
-                    {availableChecklists[getSelectedChecklistIndex()]?.title || "None"}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#555" />
+                <Text style={styles.createChecklistLinkText}>Create a Checklist →</Text>
               </TouchableOpacity>
-            )}
+            </View>
+          )}
 
-            {showChecklistOnHome && availableChecklists.length === 0 && (
-              <View style={styles.emptyChecklist}>
-                <Ionicons name="checkbox-outline" size={24} color="#555" />
-                <Text style={styles.emptyChecklistText}>
-                  No checklists available. Create one from Settings → New Checklist.
-                </Text>
-                <TouchableOpacity
-                  style={styles.createChecklistLink}
-                  onPress={() => router.push('/new-checklist')}
-                >
-                  <Text style={styles.createChecklistLinkText}>Create a Checklist →</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+          {/* Paused Activities Section */}
+          <View style={styles.sectionHeaderContainer}>
+            <Ionicons name="pause-circle-outline" size={16} color="#fff" />
+            <Text style={styles.sectionHeader}>PAUSED ACTIVITIES</Text>
+          </View>
+          <View style={styles.row}>
+            <Ionicons name="pause-circle-outline" size={22} color="#a3a3a3" />
+            <Text style={styles.rowText}>Max paused activities</Text>
+            <TouchableOpacity
+              style={[styles.stepperButton, maxPaused <= 1 && styles.stepperButtonDisabled]}
+              onPress={() => {
+                const next = Math.max(1, maxPaused - 1);
+                setMaxPaused(next);
+                setMaxPausedActivities(next);
+              }}
+            >
+              <Ionicons name="remove" size={18} color={maxPaused <= 1 ? '#333' : '#fff'} />
+            </TouchableOpacity>
+            <Text style={styles.stepperValue}>{maxPaused}</Text>
+            <TouchableOpacity
+              style={[styles.stepperButton, maxPaused >= 10 && styles.stepperButtonDisabled]}
+              onPress={() => {
+                const next = Math.min(10, maxPaused + 1);
+                setMaxPaused(next);
+                setMaxPausedActivities(next);
+              }}
+            >
+              <Ionicons name="add" size={18} color={maxPaused >= 10 ? '#333' : '#fff'} />
+            </TouchableOpacity>
           </View>
         </ScrollView>
 
@@ -312,14 +329,16 @@ export default function HomeCustomizeScreen() {
             ) : (
               <>
                 <FlatList
-                  data={availableChecklists}
+                  data={[{ title: 'None', icon: 'close-circle-outline', index: -1 }, ...availableChecklists]}
                   keyExtractor={(_, i) => i.toString()}
                   renderItem={({ item, index }) => {
-                    const isSelected = index === getSelectedChecklistIndex();
+                    const isSelected = index === 0 && getSelectedChecklistIndex() === -1
+                      ? true
+                      : item.index !== -1 && item.index === getSelectedChecklistIndex();
                     return (
                       <TouchableOpacity
                         style={[styles.checklistItem, isSelected && styles.checklistItemSelected]}
-                        onPress={() => handleSelectChecklist(index)}
+                        onPress={() => handleSelectChecklist(index === 0 ? -1 : item.index)}
                       >
                         <View style={styles.checklistItemLeft}>
                           <Ionicons name={item.icon as any || 'list-outline'} size={24} color={isSelected ? '#fff' : '#888'} />
@@ -347,6 +366,25 @@ export default function HomeCustomizeScreen() {
           </View>
         </View>
       </Modal>
+
+      <CustomAlert
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onConfirm={alertOnConfirm}
+        confirmText={alertConfirmText}
+        singleButton
+      />
+
+      <CustomAlert
+        visible={alertDeleteVisible}
+        title="Delete Goal"
+        message={`Delete "${deleteGoalTitle}"?`}
+        onConfirm={confirmDeleteGoal}
+        onCancel={() => setAlertDeleteVisible(false)}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </View>
   );
 }
@@ -365,31 +403,12 @@ const styles = StyleSheet.create({
   doneText: { color: '#000', fontSize: 13, fontWeight: '600' },
   content: { flex: 1 },
   scrollView: { flex: 1 },
-  checklistSection: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },
-  checklistToggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  checklistToggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  checklistToggleText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  checklistSelectButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 0.5, borderColor: '#fff' },
-  checklistSelectText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 12, flex: 1 },
-  currentSelectionContainer: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
-  currentSelectionValue: { color: '#fff', fontSize: 13, fontWeight: '500' },
-  emptyChecklist: { alignItems: 'center', padding: 20, marginBottom: 16, backgroundColor: '#1a1a1a', borderRadius: 12 },
+  sectionHeaderContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8 },
+  sectionHeader: { color: '#fff', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#171717', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12, marginHorizontal: 16, marginBottom: 4, gap: 12 },
+  rowText: { color: '#fafafa', fontSize: 15, flex: 1 },
+  rowValue: { color: '#a3a3a3', fontSize: 14 },
+  emptyChecklist: { alignItems: 'center', padding: 20, marginBottom: 16, backgroundColor: '#171717', borderRadius: 12, marginHorizontal: 16 },
   emptyChecklistText: { color: '#888', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 18 },
   createChecklistLink: { marginTop: 12 },
   createChecklistLinkText: { color: '#fff', fontSize: 14, fontWeight: '500' },
@@ -442,4 +461,7 @@ const styles = StyleSheet.create({
   checklistFooter: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingTop: 12 },
   manageChecklistsButton: { paddingVertical: 12, alignItems: 'center' },
   manageChecklistsText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  stepperButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  stepperButtonDisabled: { backgroundColor: '#1a1a1a' },
+  stepperValue: { color: '#fafafa', fontSize: 16, fontWeight: '600', minWidth: 24, textAlign: 'center' },
 });

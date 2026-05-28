@@ -14,7 +14,7 @@ import { getChecklists, setSelectedChecklistIndex, getSelectedChecklistIndex, ge
 const { width: screenWidth } = Dimensions.get('window');
 
 const GOAL_COLORS = [
-  '#4ECDC4', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1',
+  '#fff', '#FF6B6B', '#FFEAA7', '#DDA0DD', '#45B7D1',
   '#96CEB4', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7',
 ];
 const GOAL_HEIGHT = 28;
@@ -196,13 +196,13 @@ export default function HomeCustomizeScreen() {
           <View style={styles.checklistSection}>
             <View style={styles.checklistToggleRow}>
               <View style={styles.checklistToggleLeft}>
-                <Ionicons name="checkbox-outline" size={22} color="#4ECDC4" />
+                <Ionicons name="checkbox-outline" size={22} color="#fff" />
                 <Text style={styles.checklistToggleText}>Show Checklist on Home</Text>
               </View>
               <Switch
                 value={showChecklistOnHome}
                 onValueChange={toggleChecklistOnHome}
-                trackColor={{ false: '#333', true: '#4ECDC4' }}
+                trackColor={{ false: '#333', true: '#fff' }}
                 thumbColor={showChecklistOnHome ? '#fff' : '#888'}
               />
             </View>
@@ -215,7 +215,7 @@ export default function HomeCustomizeScreen() {
                   setShowChecklistModal(true);
                 }}
               >
-                <Ionicons name="list-outline" size={20} color="#4ECDC4" />
+                <Ionicons name="list-outline" size={20} color="#fff" />
                 <Text style={styles.checklistSelectText}>Select Checklist</Text>
                 <View style={styles.currentSelectionContainer}>
                   <Text style={styles.currentSelectionValue}>
@@ -374,12 +374,12 @@ export default function HomeCustomizeScreen() {
                         onPress={() => handleSelectChecklist(index)}
                       >
                         <View style={styles.checklistItemLeft}>
-                          <Ionicons name={item.icon as any || 'list-outline'} size={24} color={isSelected ? '#4ECDC4' : '#888'} />
+                          <Ionicons name={item.icon as any || 'list-outline'} size={24} color={isSelected ? '#fff' : '#888'} />
                           <Text style={[styles.checklistItemText, isSelected && styles.checklistItemTextSelected]}>{item.title}</Text>
                         </View>
                         {isSelected ? (
                           <View style={styles.selectedBadge}>
-                            <Ionicons name="checkmark-circle" size={20} color="#4ECDC4" />
+                            <Ionicons name="checkmark-circle" size={20} color="#fff" />
                             <Text style={styles.selectedBadgeText}>Active</Text>
                           </View>
                         ) : (
@@ -438,13 +438,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   checklistSelectButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(78,205,196,0.2)' },
-  checklistSelectText: { color: '#4ECDC4', fontSize: 15, fontWeight: '600', marginLeft: 12, flex: 1 },
+  checklistSelectText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 12, flex: 1 },
   currentSelectionContainer: { flexDirection: 'row', alignItems: 'center', marginRight: 8 },
-  currentSelectionValue: { color: '#4ECDC4', fontSize: 13, fontWeight: '500' },
+  currentSelectionValue: { color: '#fff', fontSize: 13, fontWeight: '500' },
   emptyChecklist: { alignItems: 'center', padding: 20, marginBottom: 16, backgroundColor: '#1a1a1a', borderRadius: 12 },
   emptyChecklistText: { color: '#888', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 18 },
   createChecklistLink: { marginTop: 12 },
-  createChecklistLinkText: { color: '#4ECDC4', fontSize: 14, fontWeight: '500' },
+  createChecklistLinkText: { color: '#fff', fontSize: 14, fontWeight: '500' },
   goalsSection: {
     paddingHorizontal: 16,
     paddingBottom: 30,
@@ -474,25 +474,25 @@ const styles = StyleSheet.create({
   colorOptionSelected: { borderColor: '#fff', transform: [{ scale: 1.1 }] },
   modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 16, alignItems: 'center' },
   modalCancel: { color: '#888', fontSize: 16 },
-  modalCreate: { color: '#4ECDC4', fontSize: 16, fontWeight: '600' },
+  modalCreate: { color: '#fff', fontSize: 16, fontWeight: '600' },
   deleteButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 'auto' },
   deleteButtonText: { color: '#FF6B6B', fontSize: 16, fontWeight: '600' },
   checklistModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   checklistDescription: { color: '#888', fontSize: 13, marginBottom: 20, lineHeight: 18 },
   checklistItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 10, marginBottom: 6, backgroundColor: '#0a0a0a', borderWidth: 1, borderColor: '#2a2a2a' },
-  checklistItemSelected: { borderColor: '#4ECDC4', backgroundColor: 'rgba(78,205,196,0.1)' },
+  checklistItemSelected: { borderColor: '#fff', backgroundColor: 'rgba(78,205,196,0.1)' },
   checklistItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   checklistItemText: { color: '#fff', fontSize: 16 },
-  checklistItemTextSelected: { color: '#4ECDC4', fontWeight: '600' },
+  checklistItemTextSelected: { color: '#fff', fontWeight: '600' },
   selectedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  selectedBadgeText: { color: '#4ECDC4', fontSize: 12, fontWeight: '600' },
+  selectedBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   noChecklistsContainer: { alignItems: 'center', padding: 20 },
   noChecklistsTitle: { color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 12, marginBottom: 8 },
   noChecklistsText: { color: '#888', fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  createChecklistButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#4ECDC4', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
+  createChecklistButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
   createChecklistText: { color: '#000', fontSize: 15, fontWeight: '600' },
   checklistFooter: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#2a2a2a', paddingTop: 12 },
   manageChecklistsButton: { paddingVertical: 12, alignItems: 'center' },
-  manageChecklistsText: { color: '#4ECDC4', fontSize: 14, fontWeight: '500' },
+  manageChecklistsText: { color: '#fff', fontSize: 14, fontWeight: '500' },
 });
 

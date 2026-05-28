@@ -45,7 +45,7 @@ const iconOptions = [
 
 const colorOptions = [
   '#FF6B6B', // Red
-  '#4ECDC4', // Teal
+  '#fff', // Teal
   '#45B7D1', // Blue
   '#96CEB4', // Mint
   '#FFEAA7', // Yellow
@@ -176,14 +176,6 @@ export default function AddActivityPage() {
 
     setActivities([...currentActivities, newActivity]);
 
-    Alert.alert('Success', 'Activity created successfully!', [
-      {
-        text: 'OK',
-        onPress: () => {
-          router.replace('/edit_things');
-        },
-      },
-    ]);
   };
 
   return (

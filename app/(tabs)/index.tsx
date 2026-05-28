@@ -1,6 +1,6 @@
-// app/(tabs)/index.tsx - Full working version
+// app/(tabs)/index.tsx - Fixed version with proper goal resumption from break
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getActiveTimer, setActiveTimer, subscribe, getChecklists, getSelectedChecklistIndex, getShowChecklistOnHome, getGoals, setGoals, Goal, getChecklistForActivity, addHistoryLog } from '../activitiesStore';
+import { getActiveTimer, setActiveTimer, subscribe, getChecklists, getSelectedChecklistIndex, getShowChecklistOnHome, getGoals, setGoals, Goal, getChecklistForActivity, addHistoryLog, getActivities, getPendingPauseActivity, clearPendingPauseActivity, setPreBreakTimerData, getPreBreakTimerData, clearPreBreakTimerData, getMaxPausedActivities, getSuspendedGoal, setSuspendedGoal, getSuspendedActivities, setSuspendedActivities, removeSuspendedActivity } from '../activitiesStore';
 import {
   View, Text, StyleSheet, TouchableOpacity, Vibration,
   Modal, Alert, Dimensions, ScrollView, Platform, AppState,
@@ -15,7 +15,7 @@ const GOAL_HEIGHT = 28;
 const GAP = 8;
 const CONTAINER_WIDTH = screenWidth - 32;
 
-type TimerType = 'normal' | 'goal' | 'break';
+type TimerType = 'normal' | 'goal' | 'break' | 'idle';
 
 // Track active session for logging
 interface ActiveSession {
@@ -23,6 +23,23 @@ interface ActiveSession {
   title: string;
   color: string;
   startTime: number;
+}
+
+// Interface for suspended goal
+interface SuspendedGoal {
+  id: number;
+  remainingSeconds: number;
+  color: string;
+  title: string;
+  totalSeconds?: number;
+  userDuration?: number;
+}
+
+interface SuspendedActivity {
+  name: string;
+  color: string;
+  remainingSeconds: number;
+  userDuration?: number;
 }
 
 export default function IndexScreen() {
@@ -45,17 +62,25 @@ export default function IndexScreen() {
   const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
   const [goalCompletedNotified, setGoalCompletedNotified] = useState(false);
   const [breakNotified, setBreakNotified] = useState(false);
-  const [suspendedGoal, setSuspendedGoal] = useState<{ id: number; remainingSeconds: number; color: string; title: string } | null>(null);
+  const [suspendedGoal, setSuspendedGoalState] = useState<SuspendedGoal | null>(getSuspendedGoal());
+  const [suspendedActivities, setSuspendedActivitiesState] = useState<SuspendedActivity[]>(getSuspendedActivities());
+  const [maxPaused, setMaxPaused] = useState(getMaxPausedActivities());
+
+  // Max suspended alert
+  const [showMaxSuspendedAlert, setShowMaxSuspendedAlert] = useState(false);
 
   // Track current session for logging
   const currentSessionRef = useRef<ActiveSession | null>(null);
   const isRestoringRef = useRef<boolean>(false);
 
-  // Store original duration for restart after break
-  const [originalActivityDuration, setOriginalActivityDuration] = useState<number | null>(null);
+  // Flag to prevent auto-restart during break
+  const isManualBreakRef = useRef<boolean>(false);
 
-  // PAUSED ACTIVITY
-  const [pausedActivity, setPausedActivity] = useState<{ name: string; color: string; remainingSeconds: number } | null>(null);
+  // Flag to prevent recursive timer restart
+  const isUpdatingTimerRef = useRef<boolean>(false);
+
+  // Store the user-selected duration (the exact duration the user chose when starting the activity)
+  const [currentActivityUserDuration, setCurrentActivityUserDuration] = useState<number | null>(null);
 
   // Checklist State
   const [selectedChecklistIndex, setSelectedChecklistIndex] = useState(getSelectedChecklistIndex());
@@ -70,7 +95,10 @@ export default function IndexScreen() {
 
   const [savedMode, setSavedMode] = useState<'countdown' | 'stopwatch'>(mode);
   const [savedModeSeconds, setSavedModeSeconds] = useState<number>(0);
-  const [goals, setGoalsState] = useState<Goal[]>(getGoals());
+  const [goals, setGoalsState] = useState<Goal[]>([]);
+
+  // Force update counter to trigger re-renders
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   const activeTimerInterval = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -86,8 +114,27 @@ export default function IndexScreen() {
   const lastRemainingSecondsRef = useRef<number | null>(null);
   const goalTotalSecondsRef = useRef<number | null>(null);
   const remainingSecondsRef = useRef<number | null>(null);
+  const timerStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => { goalsRef.current = goals; }, [goals]);
+
+  // Load goals from store on mount
+  useEffect(() => {
+    const loadGoals = () => {
+      const loadedGoals = getGoals();
+      console.log("Loaded goals from store:", loadedGoals.map(g => ({ id: g.id, remainingSeconds: g.remainingSeconds, title: g.title, isCompleted: g.isCompleted })));
+      setGoalsState(loadedGoals);
+    };
+    loadGoals();
+  }, []);
+
+  // Force update every 100ms to ensure UI refreshes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setForceUpdate(prev => prev + 1);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   const formatDurationForLog = (seconds: number): string => {
     const minutes = Math.floor(Math.abs(seconds) / 60);
@@ -202,43 +249,104 @@ export default function IndexScreen() {
   }, []);
 
   // Subscribe to store changes
+  const prevChecklistIndexRef = useRef(getSelectedChecklistIndex());
   useEffect(() => {
     const unsubscribe = subscribe(() => {
       if (isSavingToStore.current) return;
+      if (isUpdatingTimerRef.current) return;
 
       const idx = getSelectedChecklistIndex();
       setSelectedChecklistIndex(idx);
       const lists = getChecklists();
       if (lists[idx]) {
         setChecklistItems(lists[idx].items.map(i => i.text));
-        setChecklistCompleted(new Array(lists[idx].items.length).fill(false));
+        if (prevChecklistIndexRef.current !== idx) {
+          prevChecklistIndexRef.current = idx;
+          const savedKey = `checklist_completed_${idx}`;
+          const saved = store[savedKey];
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setChecklistCompleted(parsed.length === lists[idx].items.length ? parsed : new Array(lists[idx].items.length).fill(false));
+          } else {
+            setChecklistCompleted(new Array(lists[idx].items.length).fill(false));
+          }
+        }
       } else {
         setChecklistItems([]);
         setChecklistCompleted([]);
       }
       setShowChecklistOnHome(getShowChecklistOnHome());
+      setMaxPaused(getMaxPausedActivities());
       setGoalsState(getGoals());
+      setSuspendedGoalState(getSuspendedGoal());
+      setSuspendedActivitiesState(getSuspendedActivities());
 
       const activeTimer = getActiveTimer();
-      if (activeTimer && activeTimer.activityName !== activeTimerTitle) {
+      if (activeTimer && activeTimer.activityName !== activeTimerTitle && activeTimer.activityName !== 'Break') {
+        console.log("New timer from store:", activeTimer.activityName, "current:", activeTimerTitle);
+
+        if (isManualBreakRef.current && timerType === 'break') {
+          console.log("Break mode interrupted by new activity");
+          isManualBreakRef.current = false;
+        }
+
         stopAllIntervals();
+
+        // Check if we need to pause the previous activity before starting the new one
+        const pendingPause = getPendingPauseActivity();
+        if (pendingPause) {
+          // Check if the paused item is a goal (by matching title)
+          const allGoals = getGoals();
+          const matchingGoal = allGoals.find(g => g.title === pendingPause.name);
+          if (matchingGoal) {
+            setSuspendedGoal({
+              id: matchingGoal.id,
+              remainingSeconds: pendingPause.remainingSeconds,
+              color: pendingPause.color,
+              title: pendingPause.name,
+              userDuration: pendingPause.userDuration,
+            });
+          } else {
+            const current = getSuspendedActivities();
+            if (current.length < maxPaused && !current.some(a => a.name === pendingPause.name)) {
+              setSuspendedActivities([...current, pendingPause]);
+            }
+          }
+          clearPendingPauseActivity();
+        }
+
         startActivityTimer(activeTimer, false);
       }
     });
     return unsubscribe;
-  }, [activeTimerTitle]);
+  }, [activeTimerTitle, timerType]);
 
-  // Check for active timer on focus
+  // Check for active timer on focus and force update
   useFocusEffect(
     useCallback(() => {
+      if (isManualBreakRef.current && timerType === 'break') {
+        return;
+      }
+
       const activeTimer = getActiveTimer();
-      if (activeTimer && activeTimer.activityName !== activeTimerTitle) {
+      if (activeTimer && activeTimer.activityName !== activeTimerTitle && activeTimer.activityName !== 'Break') {
         stopAllIntervals();
         startActivityTimer(activeTimer, false);
       }
+      setForceUpdate(prev => prev + 1);
       return () => { };
-    }, [activeTimerTitle])
+    }, [activeTimerTitle, timerType])
   );
+
+  // Check for pending timer on mount and when forceUpdate changes
+  useEffect(() => {
+    const activeTimer = getActiveTimer();
+    if (activeTimer && activeTimer.activityName && activeTimer.activityName !== 'Break' && !activeTimerTitle && !isManualBreakRef.current) {
+      const elapsedSeconds = Math.floor((Date.now() - activeTimer.startTime) / 1000);
+      const remainingSeconds = Math.max(0, activeTimer.durationSeconds - elapsedSeconds);
+      startActivityTimer({ ...activeTimer, durationSeconds: remainingSeconds }, false);
+    }
+  }, [forceUpdate]);
 
   const saveGoalsWithFlag = (newGoals: Goal[]) => {
     isSavingToStore.current = true;
@@ -305,19 +413,40 @@ export default function IndexScreen() {
   };
 
   // Start activity timer - CONTINUES BEYOND ZERO
-  const startActivityTimer = (activeTimer: { activityName: string; activityColor: string; durationSeconds: number }, isRestoring: boolean = false) => {
-    console.log("startActivityTimer called with:", activeTimer.activityName, "isRestoring:", isRestoring);
+  const startActivityTimer = (activeTimer: { activityName: string; activityColor: string; durationSeconds: number; userSelectedDuration?: number }, isRestoring: boolean = false) => {
+    console.log("startActivityTimer called with:", activeTimer.activityName, "duration:", activeTimer.durationSeconds);
 
+    // Clear the manual break flag when starting an activity
+    isManualBreakRef.current = false;
+
+    // Stop all existing intervals first
     stopAllIntervals();
+
     isRestoringRef.current = isRestoring;
 
-    // Store original duration for restart after break
-    setOriginalActivityDuration(activeTimer.durationSeconds);
+    // Store the user-selected duration for this activity
+    const userDuration = activeTimer.userSelectedDuration || activeTimer.durationSeconds;
+    setCurrentActivityUserDuration(userDuration);
+
+    // Store the start time for this timer session
+    const startTime = Date.now();
+    timerStartTimeRef.current = startTime;
+
+    // Update the active timer in the store
+    isUpdatingTimerRef.current = true;
+    setActiveTimer({
+      activityName: activeTimer.activityName,
+      activityColor: activeTimer.activityColor,
+      durationSeconds: activeTimer.durationSeconds,
+      startTime: startTime,
+      userSelectedDuration: userDuration
+    });
+    isUpdatingTimerRef.current = false;
 
     // Always start tracking session for this activity
     startNewSession('activity', activeTimer.activityName, activeTimer.activityColor);
 
-    setTimerType('goal');
+    setTimerType('goal'); // Activities use goal timer type
     setMode('countdown');
     const safeDuration = Math.max(0, activeTimer.durationSeconds);
     remainingSecondsRef.current = safeDuration;
@@ -327,9 +456,7 @@ export default function IndexScreen() {
     setGoalCompletedNotified(false);
     activeGoalIdRef.current = null;
     goalTotalSecondsRef.current = safeDuration;
-    setPausedActivity(null);
-    setSuspendedGoal(null);
-    lastUpdateTimeRef.current = Date.now();
+    lastUpdateTimeRef.current = startTime;
 
     loadActivityChecklist(activeTimer.activityName);
 
@@ -342,30 +469,30 @@ export default function IndexScreen() {
     activeTimerInterval.current = setInterval(() => {
       if (remainingSecondsRef.current === null) return;
 
-      // Continue counting down (can go negative)
       remainingSecondsRef.current -= 1;
       setActiveTimerRemainingSec(remainingSecondsRef.current);
 
-      // Vibrate once when crossing zero
+      isUpdatingTimerRef.current = true;
+      setActiveTimer({
+        activityName: activeTimer.activityName,
+        activityColor: activeTimer.activityColor,
+        durationSeconds: remainingSecondsRef.current,
+        startTime: timerStartTimeRef.current || startTime,
+        userSelectedDuration: userDuration
+      });
+      isUpdatingTimerRef.current = false;
+
       if (remainingSecondsRef.current === -1 && !goalCompletedNotified) {
         setGoalCompletedNotified(true);
         Vibration.vibrate([500, 200, 500]);
       }
+
+      setForceUpdate(prev => prev + 1);
     }, 1000);
 
-    setActiveTimer(null);
+    setForceUpdate(prev => prev + 1);
     isRestoringRef.current = false;
   };
-
-  // Check for pending timer on mount
-  useEffect(() => {
-    const activeTimer = getActiveTimer();
-    if (activeTimer) {
-      const elapsedSeconds = Math.floor((Date.now() - activeTimer.startTime) / 1000);
-      const remainingSeconds = activeTimer.durationSeconds - elapsedSeconds;
-      startActivityTimer({ ...activeTimer, durationSeconds: remainingSeconds }, false);
-    }
-  }, []);
 
   // Load initial checklist
   useEffect(() => {
@@ -451,14 +578,30 @@ export default function IndexScreen() {
     // Log current session before stopping
     logCurrentSession();
 
+    // Clear active timer from store when stopping
+    isUpdatingTimerRef.current = true;
+    setActiveTimer(null);
+    isUpdatingTimerRef.current = false;
+
     stopAllIntervals();
+
+    // Save goal progress when stopping
     if (timerType === 'goal' && activeGoalIdRef.current !== null && remainingSecondsRef.current !== null && saveRemainingForGoal) {
       const safeRemaining = remainingSecondsRef.current;
-      const updatedGoals = goals.map(g => g.id === activeGoalIdRef.current ? { ...g, remainingSeconds: safeRemaining, isActive: false } : g);
+      const currentGoal = goals.find(g => g.id === activeGoalIdRef.current);
+      console.log(`Saving goal ${activeGoalIdRef.current} (${currentGoal?.title}) with remaining seconds: ${safeRemaining}`);
+
+      const updatedGoals = goals.map(g => g.id === activeGoalIdRef.current ? {
+        ...g,
+        remainingSeconds: safeRemaining,
+        progress: currentGoal?.totalSeconds && currentGoal.totalSeconds > 0 ? Math.max(0, Math.min(100, ((currentGoal.totalSeconds - safeRemaining) / currentGoal.totalSeconds) * 100)) : g.progress,
+        isActive: false
+      } : g);
       saveGoalsWithFlag(updatedGoals);
       activeGoalIdRef.current = null;
     }
-    if (timerType !== 'normal') {
+
+    if (timerType !== 'normal' && !keepSuspended) {
       setMode(savedMode);
       if (savedMode === 'countdown') setCountdownSeconds(Math.max(0, savedModeSeconds));
       else setStopwatchSeconds(savedModeSeconds);
@@ -470,8 +613,7 @@ export default function IndexScreen() {
       setGoalCompletedNotified(false); setBreakNotified(false);
       goalTotalSecondsRef.current = null;
       remainingSecondsRef.current = null;
-      // Clear original duration when timer stops
-      setOriginalActivityDuration(null);
+      timerStartTimeRef.current = null;
     }
     if (isInverted && !keepSuspended) {
       setIsInverted(false); setTargetSeconds(null); setInvertedProgress(0); setInvertCompleted(false);
@@ -479,20 +621,55 @@ export default function IndexScreen() {
   };
 
   const startCountdownTimer = (type: 'goal' | 'break', initialSeconds: number, color: string, title: string, goalId?: number) => {
+    console.log("startCountdownTimer called with type:", type, "initialSeconds:", initialSeconds, "title:", title);
+
     stopAllIntervals();
     const safeInitialSeconds = Math.max(0, initialSeconds);
+    const startTime = Date.now();
 
     // Start tracking session for goal or break
     if (type === 'goal') {
+      // Clear manual break flag when starting a goal
+      isManualBreakRef.current = false;
       startNewSession('goal', title, color);
     } else if (type === 'break') {
-      startNewSession('break', 'Break', '#4ECDC4');
+      startNewSession('break', 'Break', '#fff');
+      isManualBreakRef.current = true;
+    }
+
+    // Set the active timer in the store
+    if (type === 'break') {
+      isUpdatingTimerRef.current = true;
+      setActiveTimer({
+        activityName: 'Break',
+        activityColor: '#fff',
+        durationSeconds: safeInitialSeconds,
+        startTime: startTime,
+        userSelectedDuration: safeInitialSeconds
+      });
+      isUpdatingTimerRef.current = false;
+      timerStartTimeRef.current = startTime;
+    } else if (type === 'goal' && goalId) {
+      const goal = goals.find(g => g.id === goalId);
+      if (goal) {
+        isUpdatingTimerRef.current = true;
+        setActiveTimer({
+          activityName: goal.title,
+          activityColor: goal.color,
+          durationSeconds: safeInitialSeconds,
+          startTime: startTime,
+          userSelectedDuration: safeInitialSeconds
+        });
+        isUpdatingTimerRef.current = false;
+        timerStartTimeRef.current = startTime;
+      }
     }
 
     if (timerType === 'normal') {
       setSavedMode(mode);
       setSavedModeSeconds(mode === 'countdown' ? countdownSeconds : stopwatchSeconds);
     }
+
     setTimerType(type);
     remainingSecondsRef.current = safeInitialSeconds;
     setActiveTimerRemainingSec(safeInitialSeconds);
@@ -524,49 +701,49 @@ export default function IndexScreen() {
       activeGoalIdRef.current = null;
       goalTotalSecondsRef.current = null;
     }
-    setGoalCompletedNotified(false); setBreakNotified(false);
-    lastUpdateTimeRef.current = Date.now();
 
-    if (isInverted) { startInvertedTimer(safeInitialSeconds); return; }
+    setGoalCompletedNotified(false);
+    setBreakNotified(false);
+    lastUpdateTimeRef.current = startTime;
 
-    if (activeTimerInterval.current) clearInterval(activeTimerInterval.current);
+    if (isInverted) {
+      startInvertedTimer(safeInitialSeconds);
+      return;
+    }
 
-    // Timer continues beyond zero - no completion logic
+    if (activeTimerInterval.current) {
+      clearInterval(activeTimerInterval.current);
+      activeTimerInterval.current = null;
+    }
+
+    // Timer continues beyond zero - allow reverse counting (negative) for break timer too
     activeTimerInterval.current = setInterval(() => {
       if (remainingSecondsRef.current === null) return;
 
       remainingSecondsRef.current -= 1;
       setActiveTimerRemainingSec(remainingSecondsRef.current);
 
-      // When break timer reaches zero or goes negative, restart the original activity
-      if (type === 'break' && remainingSecondsRef.current <= 0 && !breakNotified) {
+      // Update the active timer in store for break too
+      if (type === 'break') {
+        isUpdatingTimerRef.current = true;
+        setActiveTimer({
+          activityName: 'Break',
+          activityColor: '#fff',
+          durationSeconds: remainingSecondsRef.current,
+          startTime: timerStartTimeRef.current || startTime,
+          userSelectedDuration: safeInitialSeconds
+        });
+        isUpdatingTimerRef.current = false;
+      }
+
+      // Vibrate once when crossing zero (for break timer too)
+      if (type === 'break' && remainingSecondsRef.current === -1 && !breakNotified) {
         setBreakNotified(true);
         Vibration.vibrate([500, 200, 500]);
-
-        // Check if we have a suspended goal to resume
-        if (suspendedGoal) {
-          const goal = goalsRef.current.find(g => g.id === suspendedGoal.id);
-          if (goal && !goal.isCompleted) {
-            startCountdownTimer('goal', suspendedGoal.remainingSeconds, suspendedGoal.color, suspendedGoal.title, suspendedGoal.id);
-            setSuspendedGoal(null);
-            return;
-          }
-        }
-        // Check if we have a paused activity to resume
-        else if (pausedActivity) {
-          // Resume with the original duration, not the remaining overtime
-          const originalDuration = originalActivityDuration || pausedActivity.remainingSeconds;
-          startActivityTimer({
-            activityName: pausedActivity.name,
-            activityColor: pausedActivity.color,
-            durationSeconds: originalDuration
-          });
-          setPausedActivity(null);
-          return;
-        }
-        // If no suspended goal or paused activity, just stop
-        stopActiveTimer(false);
       }
+
+      // Force UI update
+      setForceUpdate(prev => prev + 1);
     }, 1000);
   };
 
@@ -592,10 +769,15 @@ export default function IndexScreen() {
   };
 
   const handleGoalPress = (goalId: number) => {
+    console.log("handleGoalPress called for goalId:", goalId);
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
 
+    console.log(`Goal data: title=${goal.title}, remainingSeconds=${goal.remainingSeconds}, isCompleted=${goal.isCompleted}`);
+
+    // If goal is completed, restart it
     if (goal.isCompleted) {
+      console.log("Goal is completed, restarting with full duration");
       Vibration.vibrate(20);
       const originalDuration = goal.totalSeconds && goal.totalSeconds > 0 ? goal.totalSeconds : 3600;
       const updatedGoals = goals.map(g =>
@@ -609,139 +791,218 @@ export default function IndexScreen() {
         } : g
       );
       saveGoalsWithFlag(updatedGoals);
+      stopActiveTimer(true);
       startCountdownTimer('goal', originalDuration, goal.color, goal.title, goalId);
       return;
     }
 
+    // If this goal is already active, do nothing
     if (timerType === 'goal' && activeGoalIdRef.current === goalId) {
+      console.log("Goal already active");
       Vibration.vibrate(20);
       return;
     }
 
-    const isActivityTimerRunning = (timerType === 'goal' && activeGoalIdRef.current === null && remainingSecondsRef.current !== null) ||
-      (timerType === 'normal' && !isInverted && (mode === 'countdown' ? countdownSeconds > 0 : stopwatchSeconds > 0));
-
-    if (isActivityTimerRunning && remainingSecondsRef.current !== null) {
-      const currentRemaining = remainingSecondsRef.current;
-      const currentTitle = activeTimerTitle;
-      const currentColor = activeTimerColor;
-      if (currentTitle && currentColor) {
-        setPausedActivity({
-          name: currentTitle,
-          color: currentColor,
-          remainingSeconds: currentRemaining
-        });
-        setShowActivityChecklist(false);
-        Vibration.vibrate(30);
-      }
+    // If this goal is suspended, resume it
+    if (suspendedGoal?.id === goalId && (timerType === 'break' || timerType === 'goal' || timerType === 'idle')) {
+      console.log("Goal is suspended, resuming");
+      Vibration.vibrate(30);
+      handleResumeSuspendedGoal();
+      return;
     }
 
-    if (timerType === 'break') {
-      setSuspendedGoal(null);
-      stopActiveTimer(true);
+    // ALWAYS stop whatever is currently running (activity, goal, or break)
+    // Clear manual break flag if we're starting something new
+    isManualBreakRef.current = false;
+
+    // If an activity is running (not a goal, not break), pause it before starting the goal
+    if (timerType === 'goal' && activeGoalIdRef.current === null && activeTimerTitle && activeTimerTitle !== 'Break' && remainingSecondsRef.current !== null) {
+        // Capture activity's remaining time BEFORE stopActiveTimer overwrites the ref
+        const capturedRemaining = remainingSecondsRef.current;
+        const capturedColor = activeTimerColor || '#fff';
+        const capturedUserDuration = currentActivityUserDuration || undefined;
+        const capturedTitle = activeTimerTitle;
+        const currentActs = getSuspendedActivities();
+        if (currentActs.length < maxPaused && !currentActs.some(a => a.name === capturedTitle)) {
+          setSuspendedActivities([...currentActs, {
+            name: capturedTitle,
+            color: capturedColor,
+            remainingSeconds: capturedRemaining,
+            userDuration: capturedUserDuration,
+          }]);
+        }
+      setShowActivityChecklist(false);
     }
 
-    if (timerType !== 'normal') {
-      stopActiveTimer(true);
-    }
+    // Stop any running timer - this will log the session and save goal progress
+    stopActiveTimer(true);
 
-    let startRemaining = goal.remainingSeconds !== null && goal.remainingSeconds !== undefined ? goal.remainingSeconds : 3600;
+    // Start the selected goal - load saved remaining seconds
+    let startRemaining = goal.remainingSeconds !== null && goal.remainingSeconds !== undefined && goal.remainingSeconds > 0
+      ? goal.remainingSeconds
+      : 3600;
+
+    console.log(`Starting goal ${goal.title} with remaining seconds: ${startRemaining}`);
 
     startCountdownTimer('goal', startRemaining, goal.color, goal.title, goalId);
     Vibration.vibrate(20);
   };
 
   const handleClockPress = () => {
-    // If we're already in break mode
+    console.log("handleClockPress called, timerType:", timerType, "remainingSeconds:", remainingSecondsRef.current);
+
     if (timerType === 'break') {
+      console.log("In break mode, tap clock resumes most recently paused item");
       Vibration.vibrate(30);
-      if (suspendedGoal) {
-        const goal = goals.find(g => g.id === suspendedGoal.id);
-        if (goal && !goal.isCompleted) {
-          stopActiveTimer(true);
-          startCountdownTimer('goal', suspendedGoal.remainingSeconds, suspendedGoal.color, suspendedGoal.title, suspendedGoal.id);
-          setSuspendedGoal(null);
+      isManualBreakRef.current = false;
+
+      // Use pre-break timer data to find the most recently paused item
+      const lastTimer = getPreBreakTimerData();
+      if (lastTimer) {
+        // Check if last timer was a goal
+        if (suspendedGoal && suspendedGoal.title === lastTimer.name) {
+          clearPreBreakTimerData();
+          handleResumeSuspendedGoal();
           return;
         }
-      } else if (pausedActivity) {
-        stopActiveTimer(true);
-        // Resume with original duration
-        const originalDuration = originalActivityDuration || pausedActivity.remainingSeconds;
-        startActivityTimer({
-          activityName: pausedActivity.name,
-          activityColor: pausedActivity.color,
-          durationSeconds: originalDuration
-        });
-        setPausedActivity(null);
+        // Check if last timer was an activity
+        const activityIndex = suspendedActivities.findIndex(a => a.name === lastTimer.name);
+        if (activityIndex !== -1) {
+          clearPreBreakTimerData();
+          handleResumeSuspendedActivity(activityIndex);
+          return;
+        }
+      }
+
+      // Fallback: resume suspendedGoal or the last suspended activity
+      if (suspendedGoal) {
+        handleResumeSuspendedGoal();
         return;
       }
-      stopActiveTimer(false);
+      if (suspendedActivities.length > 0) {
+        handleResumeSuspendedActivity(suspendedActivities.length - 1);
+        return;
+      }
+
+      // No suspended items — just stop the break
+      stopAllIntervals();
+      isUpdatingTimerRef.current = true;
+      setActiveTimer(null);
+      isUpdatingTimerRef.current = false;
+      setActiveTimerRemainingSec(null);
+      setActiveTimerColor(null);
+      setActiveTimerTitle(null);
+      remainingSecondsRef.current = null;
+      timerStartTimeRef.current = null;
+      setBreakNotified(false);
+      setTimerType('idle');
       return;
     }
 
-    // If we're in goal mode (either activity timer or regular goal)
-    if (timerType === 'goal') {
-      // Check if we're in overtime (negative/red)
-      const isOvertime = remainingSecondsRef.current !== null && remainingSecondsRef.current < 0;
+    if (timerType === 'goal' && remainingSecondsRef.current !== null && activeTimerTitle !== 'Break') {
+      console.log("Timer is running, pausing and starting break");
 
-      // Check if it's a regular goal (has goalId)
-      if (activeGoalIdRef.current !== null && remainingSecondsRef.current !== null) {
+      // Capture remaining time BEFORE any state updates or break start
+      // If activity was in overtime (negative), use 5:00 as fresh duration
+      const capturedRemaining = remainingSecondsRef.current !== null && remainingSecondsRef.current < 0
+        ? 300
+        : remainingSecondsRef.current!;
+      const capturedColor = activeTimerColor || '#fff';
+      const capturedUserDuration = currentActivityUserDuration || undefined;
+      const capturedTitle = activeTimerTitle!;
+
+      if (activeGoalIdRef.current !== null) {
         const goal = goals.find(g => g.id === activeGoalIdRef.current);
         if (goal && !goal.isCompleted) {
-          // For goals in overtime, don't pause - just stop and start break
-          if (isOvertime) {
-            stopActiveTimer(true);
-            startCountdownTimer('break', 300, '#4ECDC4', 'Break');
-            Vibration.vibrate(20);
-            return;
-          }
+          console.log("Pausing goal:", goal.title, "remaining:", capturedRemaining);
           setSuspendedGoal({
             id: activeGoalIdRef.current,
-            remainingSeconds: remainingSecondsRef.current,
+            remainingSeconds: capturedRemaining,
             color: goal.color,
-            title: goal.title
+            title: goal.title,
+            totalSeconds: goalTotalSecondsRef.current || undefined,
+            userDuration: capturedUserDuration,
           });
+          setShowActivityChecklist(false);
         }
-      }
-      // Check if it's an activity timer (no goalId, but has title)
-      else if (activeGoalIdRef.current === null && remainingSecondsRef.current !== null && activeTimerTitle) {
-        // For activities in overtime, don't pause - just stop and start break
-        if (isOvertime) {
-          stopActiveTimer(true);
-          startCountdownTimer('break', 300, '#4ECDC4', 'Break');
-          Vibration.vibrate(20);
-          return;
+      } else if (capturedTitle && capturedTitle !== 'Break') {
+        console.log("Pausing activity:", capturedTitle, "remaining:", capturedRemaining);
+        const currentActs = getSuspendedActivities();
+        if (!currentActs.some(a => a.name === capturedTitle)) {
+          if (currentActs.length >= maxPaused) {
+            setShowMaxSuspendedAlert(true);
+          } else {
+            setSuspendedActivities([...currentActs, {
+              name: capturedTitle,
+              color: capturedColor,
+              remainingSeconds: capturedRemaining,
+              userDuration: capturedUserDuration,
+            }]);
+          }
         }
-        setPausedActivity({
-          name: activeTimerTitle,
-          color: activeTimerColor || '#4ECDC4',
-          remainingSeconds: remainingSecondsRef.current
-        });
         setShowActivityChecklist(false);
       }
 
+      // Save pre-break timer data to store before break interval overwrites activeTimerData
+      if (activeGoalIdRef.current !== null) {
+        const goal = goals.find(g => g.id === activeGoalIdRef.current);
+        if (goal) {
+          setPreBreakTimerData({
+            name: goal.title,
+            color: goal.color,
+            remainingSeconds: capturedRemaining,
+            userDuration: capturedUserDuration,
+          });
+        }
+      } else if (capturedTitle && capturedTitle !== 'Break') {
+        setPreBreakTimerData({
+          name: capturedTitle,
+          color: capturedColor,
+          remainingSeconds: capturedRemaining,
+          userDuration: capturedUserDuration,
+        });
+      }
+
       stopActiveTimer(true);
-    }
-    // If we're in normal mode or any other state
-    else if (timerType !== 'normal') {
-      stopActiveTimer(true);
+      startCountdownTimer('break', 300, '#fff', 'Break');
+      Vibration.vibrate(20);
+      return;
     }
 
-    startCountdownTimer('break', 300, '#4ECDC4', 'Break');
-    Vibration.vibrate(20);
+    if (timerType === 'normal') {
+      console.log("Normal mode, starting break");
+      startCountdownTimer('break', 300, '#fff', 'Break');
+      Vibration.vibrate(20);
+    }
   };
 
-  const handleResumePausedActivity = () => {
-    if (pausedActivity && (timerType === 'break' || timerType === 'goal')) {
-      stopAllIntervals();
-      startActivityTimer({
-        activityName: pausedActivity.name,
-        activityColor: pausedActivity.color,
-        durationSeconds: pausedActivity.remainingSeconds
-      });
-      setPausedActivity(null);
-      Vibration.vibrate(30);
-    }
+  const handleResumeSuspendedActivity = (index: number) => {
+    const item = suspendedActivities[index];
+    if (!item || !(timerType === 'break' || timerType === 'goal' || timerType === 'idle')) return;
+
+    console.log("Resuming suspended activity:", item.name);
+    stopAllIntervals();
+    removeSuspendedActivity(index);
+    Vibration.vibrate(30);
+
+    startActivityTimer({
+      activityName: item.name,
+      activityColor: item.color,
+      durationSeconds: item.remainingSeconds,
+      userSelectedDuration: item.userDuration
+    }, false);
+  };
+
+  const handleResumeSuspendedGoal = () => {
+    const item = suspendedGoal;
+    if (!item || !(timerType === 'break' || timerType === 'goal' || timerType === 'idle')) return;
+
+    console.log("Resuming suspended goal:", item.title);
+    stopAllIntervals();
+    setSuspendedGoal(null);
+    Vibration.vibrate(30);
+
+    startCountdownTimer('goal', item.remainingSeconds, item.color, item.title, item.id);
   };
 
   const handleAddFiveMinutes = () => {
@@ -810,7 +1071,7 @@ export default function IndexScreen() {
         const goal = goals.find(g => g.id === activeGoalIdRef.current);
         if (goal) startCountdownTimer('goal', remaining, goal.color, goal.title, activeGoalIdRef.current);
         else { setTimerType('normal'); setMode('countdown'); setCountdownSeconds(remaining); }
-      } else if (timerType === 'break') { startCountdownTimer('break', remaining, '#4ECDC4', 'Break'); }
+      } else if (timerType === 'break') { startCountdownTimer('break', remaining, '#fff', 'Break'); }
       else { setMode('countdown'); setCountdownSeconds(remaining); setTimerType('normal'); }
     }
     Vibration.vibrate(30);
@@ -838,7 +1099,7 @@ export default function IndexScreen() {
     const hours = Math.floor(absSeconds / 3600);
     const minutes = Math.floor((absSeconds % 3600) / 60);
     const seconds = absSeconds % 60;
-    const sign = totalSeconds < 0 ? '-' : '';
+    const sign = totalSeconds < 0 ? '' : '';
     const cappedHours = Math.min(99, hours);
     return `${sign}${cappedHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
@@ -874,7 +1135,7 @@ export default function IndexScreen() {
   const isOvertime = !isInverted && timerType !== 'normal' && remainingSecondsRef.current !== null && remainingSecondsRef.current < 0;
   const clockColor = isInverted ? '#9B59B6' :
     (timerType === 'goal' || timerType === 'break' ?
-      (isOvertime ? '#FF4444' : (timerType === 'goal' ? activeTimerColor : '#4ECDC4')) :
+      (isOvertime ? '#FF4444' : (timerType === 'goal' ? activeTimerColor : '#fff')) :
       '#fff');
 
   const doingNowText = () => {
@@ -965,15 +1226,28 @@ export default function IndexScreen() {
         </View>
 
         <View>
-          {pausedActivity && (timerType === 'break' || timerType === 'goal') && (
-            <TouchableOpacity style={[styles.pausedActivityButton, { borderLeftColor: pausedActivity.color }]} onPress={handleResumePausedActivity}>
-              <Ionicons name="pause-circle" size={20} color="#fff" />
-              <Text style={styles.pausedActivityText}>{pausedActivity.name}</Text>
-              <Text style={[styles.pausedActivityResume, { color: pausedActivity.color }]}>{formatTimeMMSS(pausedActivity.remainingSeconds)}</Text>
+          {/* Paused items */}
+          {suspendedGoal && (timerType === 'break' || timerType === 'goal' || timerType === 'idle') && (
+            <TouchableOpacity style={styles.pausedActivityButton} onPress={handleResumeSuspendedGoal}>
+              <Ionicons name="pause-circle" size={20} color={suspendedGoal.color} />
+              <Text style={[styles.pausedActivityPill, { color: suspendedGoal.color }]}>Goal</Text>
+              <Text style={styles.pausedActivityText}>{suspendedGoal.title}</Text>
+              <Text style={[styles.pausedActivityResume, { color: suspendedGoal.color }]}>{formatTimeMMSS(suspendedGoal.remainingSeconds)}</Text>
             </TouchableOpacity>
           )}
 
-          {pausedActivity && (timerType === 'break' || timerType === 'goal') && <View style={styles.separator} />}
+          {suspendedActivities.length > 0 && (timerType === 'break' || timerType === 'goal' || timerType === 'idle') && (
+            suspendedActivities.map((item, idx) => (
+              <TouchableOpacity key={idx} style={styles.pausedActivityButton} onPress={() => handleResumeSuspendedActivity(idx)}>
+                <Ionicons name="pause-circle" size={20} color={item.color} />
+                <Text style={[styles.pausedActivityPill, { color: item.color }]}>Activity</Text>
+                <Text style={styles.pausedActivityText}>{item.name}</Text>
+                <Text style={[styles.pausedActivityResume, { color: item.color }]}>{formatTimeMMSS(item.remainingSeconds)}</Text>
+              </TouchableOpacity>
+            ))
+          )}
+
+          {(suspendedGoal || suspendedActivities.length > 0) && (timerType === 'break' || timerType === 'goal' || timerType === 'idle') && <View style={styles.separator} />}
 
           <View style={styles.goalsContainer}>
             {[...goals].reverse().map((goal) => {
@@ -990,6 +1264,8 @@ export default function IndexScreen() {
                 return '0m';
               };
 
+              const isSuspended = suspendedGoal?.id === goal.id && timerType === 'break';
+
               return (
                 <View key={goal.id} style={[styles.goalWrapper, { width: displayWidth, marginBottom: GAP }]}>
                   <TouchableOpacity style={styles.dragArea} onPress={() => handleGoalPress(goal.id)} activeOpacity={0.8}>
@@ -997,7 +1273,7 @@ export default function IndexScreen() {
                       <View style={[styles.goalFill, { width: `${goal.progress}%`, backgroundColor: goal.color, opacity: goal.isCompleted ? 0.7 : 1 }]} />
                       <View style={styles.goalContent}>
                         {timerType === 'goal' && activeGoalIdRef.current === goal.id && !goal.isCompleted && <Text style={styles.activeIndicator}>⏳</Text>}
-                        {suspendedGoal?.id === goal.id && timerType === 'break' && !goal.isCompleted && <Text style={styles.activeIndicator}>⏸</Text>}
+                        {isSuspended && !goal.isCompleted && <Text style={styles.activeIndicator}>⏸</Text>}
                         <Text style={styles.goalTitle} numberOfLines={1}>{goal.title}</Text>
                         <View style={styles.goalRight}>
                           {goal.isCompleted ? (
@@ -1039,6 +1315,22 @@ export default function IndexScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Max Suspended Activities Alert - Apple Style */}
+      <Modal visible={showMaxSuspendedAlert} transparent animationType="fade">
+        <View style={styles.appleAlertOverlay}>
+          <View style={styles.appleAlertContainer}>
+            <Text style={styles.appleAlertTitle}>Maximum Paused</Text>
+            <Text style={styles.appleAlertMessage}>
+              You can have up to {maxPaused} paused activities at a time. Resume or discard one before pausing another.
+            </Text>
+            <View style={styles.appleAlertDivider} />
+            <TouchableOpacity style={styles.appleAlertSingleButton} onPress={() => setShowMaxSuspendedAlert(false)}>
+              <Text style={styles.appleAlertConfirmText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1055,8 +1347,9 @@ const styles = StyleSheet.create({
   clockWrapper: { flex: 1, alignItems: 'center' },
   clockText: { fontWeight: '900', textAlign: 'center', fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-black', letterSpacing: 2, textShadowColor: 'rgba(0, 0, 0, 0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 },
   endTimeText: { color: '#9B59B6', fontSize: 14, textAlign: 'center', marginTop: 5 },
-  pausedActivityButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414c2', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 5, gap: 10, borderLeftWidth: 3, borderColor: '#fff', alignSelf: 'flex-start' },
+  pausedActivityButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 5, gap: 10, alignSelf: 'flex-start' },
   pausedActivityText: { color: '#fff', fontSize: 13, fontWeight: '500', flex: 1 },
+  pausedActivityPill: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   pausedActivityResume: { fontSize: 12, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   separator: { height: 1, backgroundColor: '#2a2a2a', marginVertical: 12 },
   checklistSection: { width: '100%', padding: 16, marginTop: 20, marginBottom: 20 },
@@ -1070,15 +1363,15 @@ const styles = StyleSheet.create({
   dragArea: { flex: 1 },
   goalBar: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 10, overflow: 'hidden', justifyContent: 'center', position: 'relative', height: '100%' },
   goalFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 10 },
-  goalContent: { flexDirection: 'row', alignItems: 'center', paddingLeft: 10, paddingRight: 10, height: '100%', gap: 6, zIndex: 1 },
+  goalContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, height: '100%', zIndex: 1 },
   activeIndicator: { fontSize: 11 },
-  goalTitle: { color: '#fff', fontSize: 12, fontWeight: '600', flex: 1 },
-  goalRight: { marginLeft: 4, flexDirection: 'row', alignItems: 'center' },
+  goalTitle: { color: '#fff', fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  goalRight: { position: 'absolute', right: 8, flexDirection: 'row', alignItems: 'center' },
   goalPercentRight: { color: '#fff', fontSize: 11, fontWeight: '700' },
   goalEmoji: { fontSize: 16 },
   goalHint: { color: '#555', fontSize: 9 },
   addTimeButton: { backgroundColor: '#2a2a2a', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, marginLeft: 8 },
-  addTimeText: { color: '#4ECDC4', fontSize: 10, fontWeight: '700' },
+  addTimeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   completedGoalContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   completedGoalTimeText: { fontSize: 11, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
@@ -1088,4 +1381,50 @@ const styles = StyleSheet.create({
   contextMenuContent: { flex: 1 },
   contextMenuItemText: { color: '#fff', fontSize: 15, fontWeight: '500' },
   contextMenuSubtitle: { color: '#888', fontSize: 11, marginTop: 2 },
+
+  // Apple-style Alert
+  appleAlertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  appleAlertContainer: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    width: '80%',
+    maxWidth: 320,
+    overflow: 'hidden',
+  },
+  appleAlertTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingTop: 20,
+    paddingHorizontal: 16,
+  },
+  appleAlertMessage: {
+    color: '#8e8e93',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    lineHeight: 18,
+  },
+  appleAlertDivider: {
+    height: 0.5,
+    backgroundColor: '#38383a',
+  },
+  appleAlertSingleButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appleAlertConfirmText: {
+    color: '#007aff',
+    fontSize: 17,
+    fontWeight: '600',
+  },
 });

@@ -1,4 +1,4 @@
-// components/JSONPlanner.tsx
+// components/JSONPlanner.tsx - with Apple-style alerts
 import { getPlanCompletedItem, setPlanCompletedItem } from '../app/activitiesStore';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -38,7 +38,7 @@ const isCurrentTimeBlock = (itemTime: string, nextItemTime: string | null, curre
 const getCategoryColor = (category: string): string => {
   const colors: Record<string, string> = {
     'morning': '#FF9F4A', 'fitness': '#FF6B6B', 'self-care': '#DDA0DD',
-    'nutrition': '#98D8C8', 'personal-project': '#4ECDC4', 'preparation': '#F7B731',
+    'nutrition': '#98D8C8', 'personal-project': '#fff', 'preparation': '#F7B731',
     'university': '#45B7D1', 'rest': '#96CEB4', 'hacker-training': '#E8635E',
     'ecode-work': '#6C5CE7', 'leisure': '#FFEAA7', 'reflection': '#A8E6CF',
     'sleep': '#1a1a1a', 'work': '#45B7D1', 'learning': '#DDA0DD', 'family': '#FF9F4A',
@@ -104,6 +104,34 @@ interface JSONPlannerProps {
   onSave?: (plan: DailyPlan) => void;
   onClose?: () => void;
 }
+
+// Apple-style Custom Alert Component
+const AppleAlert = ({ visible, title, message, onConfirm, onCancel, confirmText = "OK", cancelText = null, singleButton = false }: any) => {
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.alertOverlay}>
+        <View style={styles.alertContainer}>
+          <Text style={styles.alertTitle}>{title}</Text>
+          <Text style={styles.alertMessage}>{message}</Text>
+          <View style={styles.alertDivider} />
+          <View style={styles.alertButtons}>
+            {!singleButton && cancelText && (
+              <>
+                <TouchableOpacity style={styles.alertCancelButton} onPress={onCancel}>
+                  <Text style={styles.alertCancelText}>{cancelText}</Text>
+                </TouchableOpacity>
+                <View style={styles.alertButtonDivider} />
+              </>
+            )}
+            <TouchableOpacity style={[styles.alertConfirmButton, singleButton && styles.alertSingleButton]} onPress={onConfirm}>
+              <Text style={[styles.alertConfirmText, singleButton && styles.alertSingleButtonText]}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 const exampleJSON = `{
   "date": "Monday, May 11, 2026",
@@ -213,6 +241,14 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<DailyPlan | null>(null);
 
+  // Apple Alert States
+  const [showExampleAlert, setShowExampleAlert] = useState(false);
+  const [showConvertSuccessAlert, setShowConvertSuccessAlert] = useState(false);
+  const [showConvertErrorAlert, setShowConvertErrorAlert] = useState(false);
+  const [showDeleteConfirmAlert, setShowDeleteConfirmAlert] = useState(false);
+  const [showSaveSuccessAlert, setShowSaveSuccessAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+
   // Live time tracking
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentBlockIndex, setCurrentBlockIndex] = useState<number | null>(null);
@@ -320,13 +356,15 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
 
   const handleConvertJSON = () => {
     if (!jsonInput.trim()) {
-      setPlannerError('Please paste JSON data');
+      setAlertMessage('Please paste JSON data');
+      setShowConvertErrorAlert(true);
       return;
     }
     try {
       const parsed = JSON.parse(jsonInput);
       if (!parsed.schedule || !Array.isArray(parsed.schedule)) {
-        setPlannerError('Invalid JSON: missing "schedule" array');
+        setAlertMessage('Invalid JSON: missing "schedule" array');
+        setShowConvertErrorAlert(true);
         return;
       }
       setDailyPlan(parsed);
@@ -341,9 +379,10 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
         onSave(parsed);
       }
 
-      Alert.alert('Success', 'Your daily plan has been saved!');
+      setShowConvertSuccessAlert(true);
     } catch (error: any) {
-      setPlannerError('Invalid JSON format: ' + error.message);
+      setAlertMessage('Invalid JSON format: ' + error.message);
+      setShowConvertErrorAlert(true);
     }
   };
 
@@ -358,35 +397,28 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
         onSave(editData);
       }
 
-      Alert.alert('Success', 'Your plan has been updated!');
+      setShowSaveSuccessAlert(true);
     }
   };
 
   const clearPlan = () => {
-    Alert.alert(
-      'Delete',
-      'Are you sure you want to delete your daily plan?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: () => {
-            setDailyPlan(null);
-            setScheduleItems([]);
-            setChecklistItems([]);
-            setCurrentBlockIndex(null);
-            if (onSave) {
-              onSave(null as any);
-            }
-          }
-        }
-      ]
-    );
+    setShowDeleteConfirmAlert(true);
+  };
+
+  const confirmClearPlan = () => {
+    setDailyPlan(null);
+    setScheduleItems([]);
+    setChecklistItems([]);
+    setCurrentBlockIndex(null);
+    if (onSave) {
+      onSave(null as any);
+    }
+    setShowDeleteConfirmAlert(false);
   };
 
   const copyExampleJSON = () => {
     setJsonInput(exampleJSON);
-    Alert.alert('Copied!', 'Example JSON has been pasted into the editor.');
+    setShowExampleAlert(true);
   };
 
   const toggleScheduleComplete = (index: number) => {
@@ -862,6 +894,54 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
       {isEditing && dailyPlan ? renderEditMode() : (dailyPlan ? renderDailyPlanView() : renderJSONInputView())}
       {renderHelpModal()}
       {renderSummaryModal()}
+
+      {/* Apple-style Alerts */}
+      <AppleAlert
+        visible={showExampleAlert}
+        title="Example Loaded"
+        message="Example JSON has been pasted into the editor. Tap 'Convert to Beautiful Plan' to see your daily schedule!"
+        onConfirm={() => setShowExampleAlert(false)}
+        confirmText="Great!"
+        singleButton={true}
+      />
+
+      <AppleAlert
+        visible={showConvertSuccessAlert}
+        title="Success"
+        message="Your daily plan has been saved! You can now track your progress."
+        onConfirm={() => setShowConvertSuccessAlert(false)}
+        confirmText="Awesome"
+        singleButton={true}
+      />
+
+      <AppleAlert
+        visible={showConvertErrorAlert}
+        title="Invalid JSON"
+        message={alertMessage}
+        onConfirm={() => setShowConvertErrorAlert(false)}
+        confirmText="OK"
+        singleButton={true}
+      />
+
+      <AppleAlert
+        visible={showDeleteConfirmAlert}
+        title="Delete Plan"
+        message="Are you sure you want to delete your daily plan? This action cannot be undone."
+        onConfirm={confirmClearPlan}
+        onCancel={() => setShowDeleteConfirmAlert(false)}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
+
+      <AppleAlert
+        visible={showSaveSuccessAlert}
+        title="Plan Updated"
+        message="Your changes have been saved successfully!"
+        onConfirm={() => setShowSaveSuccessAlert(false)}
+        confirmText="Great"
+        singleButton={true}
+      />
+
       {/* Delete Button - Bottom Left without background */}
       {dailyPlan && !isEditing && (
         <TouchableOpacity style={styles.deleteButton} onPress={clearPlan}>
@@ -1028,4 +1108,72 @@ const styles = StyleSheet.create({
   cancelEditText: { color: '#fff', fontSize: 16, fontWeight: '500' },
   saveEditButton: { flex: 1, backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   saveEditText: { color: '#000', fontSize: 16, fontWeight: '700' },
+  // Apple Alert Styles
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertContainer: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    width: '80%',
+    maxWidth: 320,
+    overflow: 'hidden',
+  },
+  alertTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingTop: 20,
+    paddingHorizontal: 16,
+  },
+  alertMessage: {
+    color: '#8e8e93',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    lineHeight: 18,
+  },
+  alertDivider: {
+    height: 0.5,
+    backgroundColor: '#38383a',
+  },
+  alertButtons: {
+    flexDirection: 'row',
+  },
+  alertCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  alertCancelText: {
+    color: '#ff3b30',
+    fontSize: 17,
+    fontWeight: '500',
+  },
+  alertButtonDivider: {
+    width: 0.5,
+    backgroundColor: '#38383a',
+  },
+  alertConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  alertConfirmText: {
+    color: '#007aff',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  alertSingleButton: {
+    justifyContent: 'center',
+  },
+  alertSingleButtonText: {
+    fontWeight: '600',
+  },
 });

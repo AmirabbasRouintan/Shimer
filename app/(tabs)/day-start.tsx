@@ -49,21 +49,24 @@ export default function DayStartScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header with red Cancel button and white Save button */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.cancelButton}>
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Day Start</Text>
-        <TouchableOpacity onPress={handleSave}>
+        <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
           <Text style={styles.doneText}>Save</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView style={styles.content}>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {hours.map(hour => (
           <TouchableOpacity
             key={hour}
             style={styles.hourRow}
             onPress={() => setSelectedHour(hour)}
+            activeOpacity={0.7}
           >
             <Text
               style={[
@@ -75,7 +78,7 @@ export default function DayStartScreen() {
             </Text>
             {selectedHour === hour && (
               <Ionicons
-                name="checkmark"
+                name="checkmark-circle"
                 size={22}
                 color={shadcn.colors.brand}
               />
@@ -95,30 +98,53 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: shadcn.colors.border,
+    paddingBottom: 12,
   },
-  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
+  cancelButton: {
+    backgroundColor: '#FF453A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  cancelText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600'
+  },
   headerTitle: {
     color: shadcn.colors.foreground,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
   },
+  saveButton: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
   doneText: {
-    color: shadcn.colors.brand,
-    fontSize: 16,
-    fontWeight: "600",
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
   },
   content: { flex: 1, paddingHorizontal: 16 },
   hourRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 16,
-    borderBottomWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0.5,
     borderBottomColor: shadcn.colors.border,
   },
-  hourText: { color: shadcn.colors.mutedForeground, fontSize: 18 },
-  hourTextSelected: { color: shadcn.colors.foreground, fontWeight: "600" },
+  hourText: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  hourTextSelected: {
+    color: shadcn.colors.foreground,
+    fontWeight: "700",
+    fontSize: 17,
+  },
 });

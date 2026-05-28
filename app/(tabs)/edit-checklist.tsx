@@ -108,7 +108,7 @@ export default function EditChecklistScreen() {
 
   const handleDeleteChecklist = () => {
     Alert.alert(
-      'Delete Checklist',
+      'Delete',
       `Delete "${checklist.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -255,10 +255,10 @@ export default function EditChecklistScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Delete Button - Bottom Left without background */}
+      {/* Delete Button - Bottom Right with absolute positioning */}
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteChecklist}>
-        <Ionicons name="trash-outline" size={20} color={shadcn.colors.destructive} />
-        <Text style={styles.deleteButtonText}>Delete Checklist</Text>
+        <Ionicons name="trash-outline" size={20} color="#FF453A" />
+        <Text style={styles.deleteButtonText}>Delete</Text>
       </TouchableOpacity>
 
       <Modal visible={showIconPicker} transparent animationType="slide">
@@ -433,13 +433,13 @@ const styles = StyleSheet.create({
   deleteButton: {
     position: 'absolute',
     bottom: 12,
-    left: 16,
+    right: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   deleteButtonText: {
-    color: shadcn.colors.destructive,
+    color: '#FF453A',
     fontSize: 14,
     fontWeight: '500',
   },

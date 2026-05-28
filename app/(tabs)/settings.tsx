@@ -1,14 +1,15 @@
 // app/settings.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { getChecklists, subscribe, Checklist, getFolders, getDayStart, getDailyPlan } from "../activitiesStore";
+import { getChecklists, subscribe, Checklist, getFolders, getDayStart, getDailyPlan, getActivities, getGoals, getHistoryLogs, getMaxPausedActivities, getActiveTimer, getSuspendedGoal, getSuspendedActivities, getAllPlanCompletedItems } from "../activitiesStore";
 
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
+import { File, Directory, Paths } from 'expo-file-system';
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -16,29 +17,47 @@ import {
   Text,
   TouchableOpacity,
   Vibration,
-  View
+  View,
+  ActivityIndicator,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
+import CustomAlert from "../components/CustomAlert";
 
 interface AppData {
-  checklists?: Checklist[];
-  tasks_today?: any[];
-  tasks_tomorrow?: any[];
-  home_tasks?: any[];
-  calendar_events?: Record<string, any>;
-  notes?: any[];
-  vault_files?: any[];
-  day_start?: string;
-  backup_frequency?: string;
-  last_backup?: string;
-  version?: string;
-  timestamp?: string;
-  home_screen_settings?: {
+  version: string;
+  timestamp: string;
+  activities: any[];
+  checklists: any[];
+  goals: any[];
+  folders: any[];
+  historyLogs: any[];
+  calendar_events: Record<string, any>;
+  notes: any[];
+  vault_files: any[];
+  vault_lock_type?: string;
+  vault_password?: string;
+  vault_pattern?: string;
+  vault_failed_attempts?: number;
+  day_start: string;
+  backup_frequency: string;
+  last_backup: string;
+  selectedChecklistIndex: number;
+  showChecklistOnHome: boolean;
+  maxPausedActivities: number;
+  dailyPlan: any;
+  planCompletedItems: Record<string, boolean>;
+  home_screen_settings: {
     showClock: boolean;
     showTasks: boolean;
     showSummary: boolean;
     showHistory: boolean;
   };
+  tasks_today: any[];
+  tasks_tomorrow: any[];
+  home_tasks: any[];
+  activeTimer: any;
+  suspendedGoal: any;
+  suspendedActivities: any[];
 }
 
 const store: Record<string, any> = {};
@@ -47,9 +66,13 @@ const lightHaptic = () => {
   if (Platform.OS !== "web") Vibration.vibrate(10);
 };
 
+
 export default function SettingsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [showBackupAlert, setShowBackupAlert] = useState(false);
+  const [showAutoBackupModal, setShowAutoBackupModal] = useState(false);
 
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [foldersCount, setFoldersCount] = useState(0);
@@ -60,6 +83,9 @@ export default function SettingsScreen() {
   const [homeScreenSummary, setHomeScreenSummary] = useState("Clock, Tasks");
   const [lastPlannedDate, setLastPlannedDate] = useState<{ date: string; plan: any } | null>(null);
   const [plannedDatesCount, setPlannedDatesCount] = useState(0);
+  const [showNotesUnavailableAlert, setShowNotesUnavailableAlert] = useState(false);
+  const [showSecureFilesUnavailableAlert, setShowSecureFilesUnavailableAlert] = useState(false);
+  const [showShortcutUnavailableAlert, setShowShortcutUnavailableAlert] = useState(false);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -123,7 +149,6 @@ export default function SettingsScreen() {
     useCallback(() => {
       const savedDayStart = getDayStart();
       if (savedDayStart) {
-        const hour = parseInt(savedDayStart.split(":")[0]);
         setDayStart(savedDayStart);
       } else {
         setDayStart("00:00");
@@ -173,48 +198,107 @@ export default function SettingsScreen() {
     return {
       version: "2026.1.0",
       timestamp: new Date().toISOString(),
+      activities: require("../activitiesStore").getActivities(),
       checklists: getChecklists(),
-      tasks_today: store["tasks_today"] ? JSON.parse(store["tasks_today"]) : [],
-      tasks_tomorrow: store["tasks_tomorrow"] ? JSON.parse(store["tasks_tomorrow"]) : [],
-      home_tasks: store["home_tasks"] ? JSON.parse(store["home_tasks"]) : [],
-      calendar_events: store["calendar_events"] ? JSON.parse(store["calendar_events"]) : {},
+      goals: require("../activitiesStore").getGoals(),
+      folders: getFolders(),
+      historyLogs: require("../activitiesStore").getHistoryLogs(),
+      calendar_events: require("../activitiesStore").getCalendarEvents(),
       notes: store["notes"] ? JSON.parse(store["notes"]) : [],
       vault_files: store["vault_files"] ? JSON.parse(store["vault_files"]) : [],
-      day_start: store["day_start"] || "00:00",
+      vault_lock_type: store["vault_lock_type"] || undefined,
+      vault_password: store["vault_password"] || undefined,
+      vault_pattern: store["vault_pattern"] || undefined,
+      vault_failed_attempts: store["vault_failed_attempts"] || 0,
+      day_start: require("../activitiesStore").getDayStart(),
       backup_frequency: store["backup_frequency"] || "manual",
+      last_backup: store["last_backup"] || "Never",
+      selectedChecklistIndex: require("../activitiesStore").getSelectedChecklistIndex(),
+      showChecklistOnHome: require("../activitiesStore").getShowChecklistOnHome(),
+      maxPausedActivities: getMaxPausedActivities(),
+      dailyPlan: getDailyPlan(),
+      planCompletedItems: getAllPlanCompletedItems(),
       home_screen_settings: store["home_screen_settings"] || {
         showClock: true,
         showTasks: true,
         showSummary: false,
         showHistory: false
-      }
+      },
+      tasks_today: store["tasks_today"] ? JSON.parse(store["tasks_today"]) : [],
+      tasks_tomorrow: store["tasks_tomorrow"] ? JSON.parse(store["tasks_tomorrow"]) : [],
+      home_tasks: store["home_tasks"] ? JSON.parse(store["home_tasks"]) : [],
+      activeTimer: getActiveTimer(),
+      suspendedGoal: getSuspendedGoal(),
+      suspendedActivities: getSuspendedActivities(),
     };
   };
 
-  const handleCreateBackup = async () => {
+  const saveToPhoneStorage = async (fileUri: string, fileName: string) => {
+    try {
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "application/json",
+          dialogTitle: "Save Backup",
+          UTI: "public.json",
+        });
+        Alert.alert("Success", "Backup file is ready. You can now choose where to save it.");
+      } else {
+        Alert.alert("Error", "Saving to storage is not available on this device.");
+      }
+    } catch (error) {
+      console.error("Save to storage error:", error);
+      Alert.alert("Error", "Could not save file. Please try again.");
+    }
+  };
+
+  const handleCreateBackup = async (action: 'save' | 'share') => {
+    setIsCreatingBackup(true);
+
     try {
       const data = collectAllData();
       const jsonString = JSON.stringify(data, null, 2);
-      const fileName = `ixi_backup_${new Date().toISOString().split("T")[0]}.json`;
-      const tempPath = FileSystem.documentDirectory + fileName;
-      await FileSystem.writeAsStringAsync(tempPath, jsonString);
+      const fileName = `shimer_backup_${new Date().toISOString().split("T")[0]}.json`;
 
-      if (Platform.OS === "android") {
-        await Sharing.shareAsync(tempPath, {
-          mimeType: "application/json",
-          dialogTitle: "Save Backup",
-          UTI: "public.json"
-        });
-      }
+      const cacheDir = new Directory(Paths.cache);
+      const tempFile = new File(cacheDir, fileName);
+      tempFile.create({ intermediates: true, overwrite: true });
+      tempFile.write(jsonString);
 
       const now = new Date();
       const dateStr = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
       setLastBackup(dateStr);
       store["last_backup"] = dateStr;
-      setShowBackupModal(false);
-      Alert.alert("Backup Created", `File saved as ${fileName}`);
-    } catch {
-      Alert.alert("Error", "Failed to create backup");
+
+      if (action === 'share') {
+        const isSharingAvailable = await Sharing.isAvailableAsync();
+        if (isSharingAvailable) {
+          await Sharing.shareAsync(tempFile.uri, {
+            mimeType: "application/json",
+            dialogTitle: "Share Shimer Backup",
+            UTI: "public.json",
+          });
+          Alert.alert("Success", "Backup shared successfully!");
+        } else {
+          Alert.alert("Error", "Sharing is not available on this device.");
+        }
+      } else if (action === 'save') {
+        await saveToPhoneStorage(tempFile.uri, fileName);
+      }
+
+      setTimeout(async () => {
+        try {
+          await tempFile.delete();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }, 5000);
+
+    } catch (error) {
+      console.error("Backup error:", error);
+      Alert.alert("Error", "Failed to create backup. Please try again.");
+    } finally {
+      setIsCreatingBackup(false);
     }
   };
 
@@ -222,12 +306,13 @@ export default function SettingsScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: "application/json",
-        copyToCacheDirectory: true
+        copyToCacheDirectory: true,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const fileUri = result.assets[0].uri;
-        const jsonString = await FileSystem.readAsStringAsync(fileUri);
+        const selectedFile = new File(fileUri);
+        const jsonString = await selectedFile.text();
         const data: AppData = JSON.parse(jsonString);
 
         if (!data.version || !data.timestamp) {
@@ -242,49 +327,84 @@ export default function SettingsScreen() {
             { text: "Cancel", style: "cancel" },
             {
               text: "Restore",
-              onPress: () => {
-                if (data.checklists) {
-                  const { setChecklists } = require("../activitiesStore");
-                  setChecklists(data.checklists);
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  const { setActivities, setChecklists, setGoals, setFolders, replaceHistoryLogs, setCalendarEvents, setSelectedChecklistIndex, setShowChecklistOnHome, setDayStart, setDailyPlan, setPlanCompletedItem, setMaxPausedActivities, setActiveTimer, setSuspendedGoal, setSuspendedActivities } = require("../activitiesStore");
+
+                  if (data.activities) setActivities(data.activities);
+                  if (data.checklists) setChecklists(data.checklists);
+                  if (data.goals) setGoals(data.goals);
+                  if (data.folders) setFolders(data.folders);
+                  if (data.historyLogs) replaceHistoryLogs(data.historyLogs);
+                  if (data.calendar_events) setCalendarEvents(data.calendar_events);
+                  if (data.tasks_today) store["tasks_today"] = JSON.stringify(data.tasks_today);
+                  if (data.tasks_tomorrow) store["tasks_tomorrow"] = JSON.stringify(data.tasks_tomorrow);
+                  if (data.home_tasks) store["home_tasks"] = JSON.stringify(data.home_tasks);
+                  if (data.notes) store["notes"] = JSON.stringify(data.notes);
+                  if (data.vault_files) store["vault_files"] = JSON.stringify(data.vault_files);
+                  if (data.vault_lock_type !== undefined) store["vault_lock_type"] = data.vault_lock_type;
+                  if (data.vault_password !== undefined) store["vault_password"] = data.vault_password;
+                  if (data.vault_pattern !== undefined) store["vault_pattern"] = data.vault_pattern;
+                  if (data.vault_failed_attempts !== undefined) store["vault_failed_attempts"] = data.vault_failed_attempts;
+                  if (data.day_start) setDayStart(data.day_start);
+                  if (data.backup_frequency) store["backup_frequency"] = data.backup_frequency;
+                  if (data.home_screen_settings) store["home_screen_settings"] = data.home_screen_settings;
+                  if (data.selectedChecklistIndex !== undefined) setSelectedChecklistIndex(data.selectedChecklistIndex);
+                  if (data.showChecklistOnHome !== undefined) setShowChecklistOnHome(data.showChecklistOnHome);
+                  if (data.maxPausedActivities !== undefined) setMaxPausedActivities(data.maxPausedActivities);
+                  if (data.dailyPlan !== undefined) setDailyPlan(data.dailyPlan);
+                  if (data.planCompletedItems) {
+                    for (const [key, value] of Object.entries(data.planCompletedItems)) {
+                      setPlanCompletedItem(key, value);
+                    }
+                  }
+                  if (data.activeTimer) setActiveTimer(data.activeTimer);
+                  if (data.suspendedGoal !== undefined) setSuspendedGoal(data.suspendedGoal);
+                  if (data.suspendedActivities) setSuspendedActivities(data.suspendedActivities);
+
+                  setBackupFrequency(data.backup_frequency || "manual");
+                  setDayStart(data.day_start || "00:00");
+
+                  const homeSettings = data.home_screen_settings || {
+                    showClock: true, showTasks: true, showSummary: false, showHistory: false
+                  };
+                  const visible = [];
+                  if (homeSettings.showClock) visible.push("Clock");
+                  if (homeSettings.showTasks) visible.push("Tasks");
+                  if (homeSettings.showSummary) visible.push("Summary");
+                  if (homeSettings.showHistory) visible.push("History");
+                  setHomeScreenSummary(visible.length ? visible.join(", ") : "Nothing shown");
+
+                  Alert.alert("Restored", "All data has been restored successfully.");
+                } catch (restoreError) {
+                  console.error("Restore error:", restoreError);
+                  Alert.alert("Error", "Failed to restore backup. The file may be corrupted.");
                 }
-                if (data.tasks_today) store["tasks_today"] = JSON.stringify(data.tasks_today);
-                if (data.tasks_tomorrow) store["tasks_tomorrow"] = JSON.stringify(data.tasks_tomorrow);
-                if (data.home_tasks) store["home_tasks"] = JSON.stringify(data.home_tasks);
-                if (data.calendar_events) store["calendar_events"] = JSON.stringify(data.calendar_events);
-                if (data.notes) store["notes"] = JSON.stringify(data.notes);
-                if (data.vault_files) store["vault_files"] = JSON.stringify(data.vault_files);
-                if (data.day_start) store["day_start"] = data.day_start;
-                if (data.backup_frequency) store["backup_frequency"] = data.backup_frequency;
-                if (data.home_screen_settings) store["home_screen_settings"] = data.home_screen_settings;
-
-                setBackupFrequency(data.backup_frequency || "manual");
-                setDayStart(data.day_start || "00:00");
-                const homeSettings = data.home_screen_settings || {
-                  showClock: true, showTasks: true, showSummary: false, showHistory: false
-                };
-                const visible = [];
-                if (homeSettings.showClock) visible.push("Clock");
-                if (homeSettings.showTasks) visible.push("Tasks");
-                if (homeSettings.showSummary) visible.push("Summary");
-                if (homeSettings.showHistory) visible.push("History");
-                setHomeScreenSummary(visible.length ? visible.join(", ") : "Nothing shown");
-
-                Alert.alert("Restored", "All data has been restored successfully.");
-                setShowBackupModal(false);
               }
             }
           ]
         );
       }
-    } catch {
+    } catch (error) {
+      console.error("Restore backup error:", error);
       Alert.alert("Error", "Failed to restore backup.");
     }
   };
 
-  const handleBackupNow = () => handleCreateBackup();
+  const handleBackupNow = () => setShowBackupAlert(true);
+
   const selectFrequency = (freq: string) => {
     setBackupFrequency(freq);
     store["backup_frequency"] = freq;
+  };
+
+  const openNotificationSettings = () => {
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings();
+    }
   };
 
   const formatDisplayDate = (dateKey: string): string => {
@@ -333,10 +453,10 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* VOICE NOTES - NEW SECTION */}
+        {/* VOICE NOTES */}
         <SectionHeader icon="mic-outline" title="VOICE NOTES" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/voice-notes"); }}>
-          <Ionicons name="mic-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="mic-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Voice Notes</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
@@ -353,7 +473,7 @@ export default function SettingsScreen() {
               router.push({ pathname: "/edit-checklist", params: { checklistIndex: index.toString() } });
             }}
           >
-            <Ionicons name={list.icon as any} size={22} color={shadcn.colors.foreground} />
+            <Ionicons name={list.icon as any} size={22} color="#fff" />
             <Text style={styles.rowText}>{list.title}</Text>
             <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
           </TouchableOpacity>
@@ -365,28 +485,29 @@ export default function SettingsScreen() {
 
         {/* SHORTCUTS */}
         <SectionHeader icon="flash-outline" title="SHORTCUTS" />
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-shortcut"); }}>
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); setShowShortcutUnavailableAlert(true); }}>
           <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
           <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Shortcut</Text>
         </TouchableOpacity>
 
         {/* NOTES */}
         <SectionHeader icon="document-text-outline" title="NOTES" />
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/new-note"); }}>
-          <Ionicons name="add-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
-          <Text style={[styles.rowText, { color: shadcn.colors.mutedForeground }]}>New Note</Text>
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); setShowNotesUnavailableAlert(true); }}>
+          <Ionicons name="folder-outline" size={22} color="#fff" />
+          <Text style={styles.rowText}>Notes</Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
         {/* JSON PLANNER */}
         <SectionHeader icon="code-slash" title="JSON PLANNER" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/calendar"); }}>
-          <Ionicons name="code-slash" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="code-slash" size={22} color="#fff" />
           <Text style={styles.rowText}>Calendar Planner</Text>
           <Text style={styles.valueText}>Create new plan</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/planned-dates"); }}>
-          <Ionicons name="list-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="list-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>All Plans</Text>
           <Text style={styles.valueText}>{plannedDatesCount} {plannedDatesCount === 1 ? 'plan' : 'plans'}</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
@@ -409,7 +530,7 @@ export default function SettingsScreen() {
               });
             }}
           >
-            <Ionicons name="calendar-outline" size={22} color={shadcn.colors.foreground} />
+            <Ionicons name="calendar-outline" size={22} color="#fff" />
             <View style={styles.lastPlanInfo}>
               <Text style={styles.rowText}>Last Plan</Text>
               <Text style={styles.lastPlanDate}>{formatDisplayDate(lastPlannedDate.date)}</Text>
@@ -424,19 +545,19 @@ export default function SettingsScreen() {
         {/* SETTINGS */}
         <SectionHeader icon="settings-outline" title="SETTINGS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/folders"); }}>
-          <Ionicons name="folder-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="folder-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Folders</Text>
           <Text style={styles.valueText}>{foldersCount}</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/day-start"); }}>
-          <Ionicons name="time-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="time-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Day Start</Text>
           <Text style={styles.valueText}>{dayStart}</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/home-screen-settings"); }}>
-          <Ionicons name="home-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="home-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Home Screen</Text>
           <Text style={styles.valueText}>{homeScreenSummary}</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
@@ -444,18 +565,31 @@ export default function SettingsScreen() {
 
         {/* BACKUPS */}
         <SectionHeader icon="cloud-outline" title="BACKUPS" />
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); handleCreateBackup(); }}>
-          <Ionicons name="cloud-upload-outline" size={22} color={shadcn.colors.foreground} />
-          <Text style={styles.rowText}>Create Backup</Text>
+        <TouchableOpacity
+          style={styles.row}
+          activeOpacity={0.7}
+          onPress={handleBackupNow}
+          disabled={isCreatingBackup}
+        >
+          {isCreatingBackup ? (
+            <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+          ) : (
+            <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
+          )}
+          <Text style={styles.rowText}>
+            {isCreatingBackup ? "Creating Backup..." : "Create Backup"}
+          </Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); handleRestoreBackup(); }}>
-          <Ionicons name="cloud-download-outline" size={22} color={shadcn.colors.foreground} />
+
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={handleRestoreBackup}>
+          <Ionicons name="cloud-download-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Restore Backup</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); setShowBackupModal(true); }}>
-          <Ionicons name="sync-outline" size={22} color={shadcn.colors.foreground} />
+
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => setShowAutoBackupModal(true)}>
+          <Ionicons name="sync-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Auto Backup</Text>
           <Text style={styles.valueText}>
             {backupFrequency === "manual" ? "Manual" : backupFrequency === "daily" ? "Daily" : backupFrequency === "weekly" ? "Weekly" : "Monthly"}
@@ -465,27 +599,26 @@ export default function SettingsScreen() {
 
         {/* NOTIFICATIONS */}
         <SectionHeader icon="notifications-outline" title="NOTIFICATIONS" />
-        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
-          <Ionicons name="alarm-outline" size={22} color={shadcn.colors.foreground} />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={openNotificationSettings}>
+          <Ionicons name="alarm-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Time to Break</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
-          <Ionicons name="timer-outline" size={22} color={shadcn.colors.foreground} />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={openNotificationSettings}>
+          <Ionicons name="timer-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Timer Overdue</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} activeOpacity={0.7}>
-          <Ionicons name="notifications-outline" size={22} color={shadcn.colors.foreground} />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={openNotificationSettings}>
+          <Ionicons name="notifications-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Persistent Notification</Text>
-          <Text style={styles.valueText}>Not Granted</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
         {/* SECURE FILE */}
         <SectionHeader icon="lock-closed-outline" title="SECURE FILE" />
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/secure-files"); }}>
-          <Ionicons name="lock-closed-outline" size={22} color={shadcn.colors.foreground} />
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); setShowSecureFilesUnavailableAlert(true); }}>
+          <Ionicons name="lock-closed-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Secure File Vault</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
@@ -493,17 +626,17 @@ export default function SettingsScreen() {
         {/* ABOUT */}
         <SectionHeader icon="information-circle-outline" title="ABOUT" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/ask-question"); }}>
-          <Ionicons name="help-circle-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="help-circle-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Ask a Question</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/open-source"); }}>
-          <Ionicons name="code-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="code-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Open Source</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/privacy"); }}>
-          <Ionicons name="shield-outline" size={22} color={shadcn.colors.foreground} />
+          <Ionicons name="shield-outline" size={22} color="#fff" />
           <Text style={styles.rowText}>Privacy</Text>
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
@@ -514,47 +647,78 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* Backup Modal */}
-      <Modal visible={showBackupModal} transparent animationType="slide" onRequestClose={() => setShowBackupModal(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowBackupModal(false)}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Backup Settings</Text>
-              <TouchableOpacity onPress={() => setShowBackupModal(false)}>
-                <Ionicons name="close" size={24} color={shadcn.colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
+      {/* Backup Options - Apple Style Alert */}
+      <CustomAlert
+        visible={showBackupAlert}
+        title="Backup"
+        message="Choose how to save your backup"
+        confirmText="Storage"
+        cancelText="Cancel"
+        thirdButtonText="Share"
+        onThirdButton={() => { setShowBackupAlert(false); handleCreateBackup('share'); }}
+        onConfirm={() => { setShowBackupAlert(false); handleCreateBackup('save'); }}
+        onCancel={() => setShowBackupAlert(false)}
+      />
 
-            <Text style={styles.modalSectionHeader}>FREQUENCY</Text>
-            {["manual", "daily", "weekly", "monthly"].map((freq) => (
-              <TouchableOpacity
-                key={freq}
-                style={[styles.modalOption, backupFrequency === freq && styles.modalOptionSelected]}
-                activeOpacity={0.7}
-                onPress={() => selectFrequency(freq)}
-              >
-                <Ionicons
-                  name={freq === "manual" ? "hand-left-outline" : freq === "daily" ? "today-outline" : freq === "weekly" ? "calendar-outline" : "calendar-number-outline"}
-                  size={22}
-                  color={backupFrequency === freq ? "#fff" : shadcn.colors.foreground}
-                />
-                <Text style={[styles.modalOptionText, backupFrequency === freq && styles.modalOptionTextSelected]}>
-                  {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                </Text>
-                {backupFrequency === freq && <Ionicons name="checkmark" size={20} color="#fff" />}
-              </TouchableOpacity>
-            ))}
-
-            <Text style={[styles.modalSectionHeader, { marginTop: 24 }]}>LAST BACKUP</Text>
-            <Text style={styles.lastBackupText}>{lastBackup}</Text>
-
-            <TouchableOpacity style={styles.backupNowButton} activeOpacity={0.8} onPress={handleBackupNow}>
-              <Ionicons name="cloud-upload" size={22} color="#000" />
-              <Text style={styles.backupNowText}>Create Backup Now</Text>
+      {/* Auto Backup Modal */}
+      <Modal visible={showAutoBackupModal} transparent animationType="fade">
+        <View style={styles.autoBackupOverlay}>
+          <View style={styles.autoBackupModal}>
+            <Text style={styles.autoBackupTitle}>Auto Backup</Text>
+            <Text style={styles.autoBackupSubtitle}>Choose backup frequency</Text>
+            <View style={styles.autoBackupDivider} />
+            {["manual", "daily", "weekly", "monthly"].map((freq) => {
+              const label = freq.charAt(0).toUpperCase() + freq.slice(1);
+              const selected = backupFrequency === freq;
+              return (
+                <TouchableOpacity
+                  key={freq}
+                  style={styles.autoBackupOption}
+                  activeOpacity={0.7}
+                  onPress={() => { selectFrequency(freq); setShowAutoBackupModal(false); }}
+                >
+                  <Text style={[styles.autoBackupOptionText, selected && styles.autoBackupOptionTextSelected]}>
+                    {label}
+                  </Text>
+                  {selected && <Ionicons name="checkmark" size={20} color="#007aff" />}
+                </TouchableOpacity>
+              );
+            })}
+            <View style={styles.autoBackupDivider} />
+            <TouchableOpacity
+              style={styles.autoBackupCancelButton}
+              activeOpacity={0.7}
+              onPress={() => setShowAutoBackupModal(false)}
+            >
+              <Text style={styles.autoBackupCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
+      <CustomAlert
+        visible={showNotesUnavailableAlert}
+        title="Coming Soon"
+        message="This feature is not available in this version. The developer will release it in a future update."
+        onConfirm={() => setShowNotesUnavailableAlert(false)}
+        confirmText="OK"
+        singleButton
+      />
+      <CustomAlert
+        visible={showSecureFilesUnavailableAlert}
+        title="Coming Soon"
+        message="This feature is not available in this version. The developer will release it in a future update."
+        onConfirm={() => setShowSecureFilesUnavailableAlert(false)}
+        confirmText="OK"
+        singleButton
+      />
+      <CustomAlert
+        visible={showShortcutUnavailableAlert}
+        title="Coming Soon"
+        message="This feature is not available in this version. The developer will release it in a future update."
+        onConfirm={() => setShowShortcutUnavailableAlert(false)}
+        confirmText="OK"
+        singleButton
+      />
     </View>
   );
 }
@@ -622,16 +786,61 @@ const styles = StyleSheet.create({
   versionContainer: { marginTop: 40, marginBottom: 20, alignItems: "center" },
   versionText: { ...shadcn.typography.caption, color: shadcn.colors.mutedForeground, marginTop: shadcn.spacing.xs },
   emptyText: { ...shadcn.typography.bodySmall, color: shadcn.colors.mutedForeground, textAlign: "center", marginVertical: shadcn.spacing.md },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: shadcn.colors.popover, borderTopLeftRadius: shadcn.radius.xl, borderTopRightRadius: shadcn.radius.xl, padding: shadcn.spacing.xxl, maxHeight: "80%" },
-  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: shadcn.spacing.lg },
-  modalTitle: { ...shadcn.typography.body, fontWeight: "600", color: shadcn.colors.popoverForeground },
-  modalSectionHeader: { ...shadcn.typography.sectionHeader, color: shadcn.colors.mutedForeground, marginBottom: shadcn.spacing.sm },
-  modalOption: { flexDirection: "row", alignItems: "center", backgroundColor: shadcn.colors.secondary, paddingVertical: shadcn.spacing.md + 4, paddingHorizontal: shadcn.spacing.md, borderRadius: shadcn.radius.lg, marginBottom: shadcn.spacing.sm, gap: shadcn.spacing.md },
-  modalOptionSelected: { backgroundColor: shadcn.colors.accent, borderWidth: 1, borderColor: "#fff" },
-  modalOptionText: { ...shadcn.typography.body, color: shadcn.colors.foreground, flex: 1 },
-  modalOptionTextSelected: { color: "#fff", fontWeight: "600" },
-  lastBackupText: { ...shadcn.typography.bodySmall, color: shadcn.colors.mutedForeground, marginBottom: shadcn.spacing.xl },
-  backupNowButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#fff", paddingVertical: shadcn.spacing.md + 4, borderRadius: shadcn.radius.lg, gap: shadcn.spacing.sm, marginBottom: shadcn.spacing.md },
-  backupNowText: { ...shadcn.typography.body, fontWeight: "700", color: "#000" }
+
+  // Auto Backup Modal Styles
+  autoBackupOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  autoBackupModal: {
+    backgroundColor: '#0f0f11',
+    borderRadius: 14,
+    width: '85%',
+    maxWidth: 340,
+    overflow: 'hidden',
+  },
+  autoBackupTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingTop: 20,
+  },
+  autoBackupSubtitle: {
+    color: '#8e8e93',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingTop: 4,
+    paddingBottom: 12,
+  },
+  autoBackupDivider: {
+    height: 0.5,
+    backgroundColor: '#38383a',
+  },
+  autoBackupOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  autoBackupOptionText: {
+    color: '#007aff',
+    fontSize: 17,
+  },
+  autoBackupOptionTextSelected: {
+    color: '#007aff',
+    fontWeight: '600',
+  },
+  autoBackupCancelButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  autoBackupCancelText: {
+    color: '#ff3b30',
+    fontSize: 17,
+    fontWeight: '500',
+  },
 });

@@ -1,5 +1,6 @@
 // app/edit-goal.tsx
 import React, { useState, useEffect } from 'react';
+import CustomAlert from "../components/CustomAlert";
 import {
   View,
   Text,
@@ -7,8 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Switch,
-  Alert,
   Modal,
   FlatList,
   TouchableWithoutFeedback,
@@ -30,7 +29,7 @@ const weekDays = [
 const emojiOptions = ['😊', '🎉', '🏆', '⭐', '💪', '🔥', '👏', '✨', '🎯', '💯'];
 
 const GOAL_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
+  '#FF6B6B', '#fff', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
   '#98D8C8', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7', '#A8E6CF',
   '#FF8C42', '#4A90E2', '#50E3C2', '#F5A623', '#7ED321', '#9013FE',
   '#417505', '#BD10E0', '#8B572A', '#2C3E50', '#E91E63', '#9B59B6',
@@ -44,7 +43,6 @@ export default function EditGoal() {
   const [goalTitle, setGoalTitle] = useState((params.title as string) || '');
   const [selectedColor, setSelectedColor] = useState((params.color as string) || GOAL_COLORS[0]);
   const [finishedEmoji, setFinishedEmoji] = useState((params.emoji as string) || '😊');
-  const [trackEntireActivity, setTrackEntireActivity] = useState(params.trackEntireActivity === 'true');
   const [selectedDays, setSelectedDays] = useState<string[]>(() => {
     try {
       return JSON.parse((params.selectedDays as string) || '[]');
@@ -53,28 +51,18 @@ export default function EditGoal() {
     }
   });
   const [duration, setDuration] = useState((params.duration as string) || '2h');
-  const [selectedChecklist, setSelectedChecklist] = useState<{ title: string; icon: string; index: number } | null>(null);
-  const [shortcuts, setShortcuts] = useState('None');
 
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDayPicker, setShowDayPicker] = useState(false);
-  const [showChecklistPicker, setShowChecklistPicker] = useState(false);
-  const [availableChecklists, setAvailableChecklists] = useState<{ title: string; icon: string; index: number }[]>([]);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [showRequiredAlert, setShowRequiredAlert] = useState(false);
+  const [showSavedAlert, setShowSavedAlert] = useState(false);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
   useEffect(() => {
-    loadChecklists();
     loadGoalData();
   }, []);
-
-  const loadChecklists = () => {
-    const lists = getChecklists();
-    setAvailableChecklists(lists.map((c, i) => ({
-      title: c.title,
-      icon: c.icon || 'list-outline',
-      index: i
-    })));
-  };
 
   const loadGoalData = () => {
     const goals = getGoals();
@@ -83,11 +71,8 @@ export default function EditGoal() {
       setGoalTitle(goal.title);
       setSelectedColor(goal.color);
       setFinishedEmoji(goal.emoji);
-      setTrackEntireActivity(goal.trackEntireActivity !== false);
       setSelectedDays(goal.selectedDays || []);
       setDuration(goal.duration || '2h');
-      if (goal.checklist) setSelectedChecklist(goal.checklist);
-      if (goal.shortcuts) setShortcuts(goal.shortcuts);
     }
   };
 
@@ -107,7 +92,7 @@ export default function EditGoal() {
 
   const handleSave = () => {
     if (!goalTitle.trim()) {
-      Alert.alert('Required', 'Please enter a goal title.');
+      setShowRequiredAlert(true);
       return;
     }
 
@@ -119,45 +104,29 @@ export default function EditGoal() {
           title: goalTitle.trim(),
           color: selectedColor,
           emoji: finishedEmoji,
-          trackEntireActivity: trackEntireActivity,
           selectedDays: selectedDays,
           duration: duration,
-          checklist: selectedChecklist,
-          shortcuts: shortcuts,
         };
       }
       return g;
     });
 
     updateGoal(goalId, updatedGoals.find(g => g.id === goalId)!);
-    Alert.alert('Saved', 'Goal updated successfully', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
+    setShowSavedAlert(true);
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Goal',
-      'Are you sure you want to delete this goal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteGoal(goalId);
-            router.back();
-          }
-        }
-      ]
-    );
+    setShowDeleteAlert(true);
   };
 
-  const SettingRow = ({ label, value, onPress, rightElement }: any) => (
-    <TouchableOpacity style={styles.settingRow} onPress={onPress} disabled={!onPress}>
-      <Text style={styles.settingLabel}>{label}</Text>
-      <View style={styles.settingRight}>
-        {rightElement ? rightElement : <Text style={styles.settingValue}>{value}</Text>}
+  const SettingRow = ({ icon, label, value, onPress, rightElement }: any) => (
+    <TouchableOpacity style={styles.optionRow} onPress={onPress} disabled={!onPress}>
+      <View style={styles.optionLeft}>
+        {icon && <Ionicons name={icon} size={20} color="#888" />}
+        <Text style={styles.optionLabel}>{label}</Text>
+      </View>
+      <View style={styles.optionRight}>
+        {rightElement ? rightElement : <Text style={styles.optionValue}>{value}</Text>}
         {onPress && <Ionicons name="chevron-forward" size={16} color="#555" />}
       </View>
     </TouchableOpacity>
@@ -167,7 +136,7 @@ export default function EditGoal() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.replace('/home-customize')}>
           <Text style={styles.headerCancel}>Cancel</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Goal</Text>
@@ -197,70 +166,45 @@ export default function EditGoal() {
         />
 
         {/* Appearance Section */}
-        <Text style={styles.sectionTitle}>Appearance</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Appearance</Text>
 
-        <SettingRow
-          label="Color"
-          value=""
-          onPress={() => setShowColorPicker(true)}
-          rightElement={
-            <View style={[styles.colorPreview, { backgroundColor: selectedColor }]} />
-          }
-        />
+          <SettingRow
+            icon="color-palette-outline"
+            label="Color"
+            value=""
+            onPress={() => setShowColorPicker(true)}
+            rightElement={
+              <View style={[styles.colorPreview, { backgroundColor: selectedColor }]} />
+            }
+          />
 
-        <SettingRow
-          label="Finished Emoji"
-          value={finishedEmoji}
-          onPress={() => setShowEmojiPicker(true)}
-        />
+          <SettingRow
+            icon="happy-outline"
+            label="Finished Emoji"
+            value={finishedEmoji}
+            onPress={() => setShowEmojiPicker(true)}
+          />
+        </View>
 
         {/* Goal Settings Section */}
-        <Text style={styles.sectionTitle}>Goal Settings</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Goal Settings</Text>
 
-        <SettingRow
-          label="Track Entire Activity"
-          rightElement={
-            <Switch
-              value={trackEntireActivity}
-              onValueChange={setTrackEntireActivity}
-              trackColor={{ false: '#333', true: '#fff' }}
-              thumbColor={trackEntireActivity ? '#fff' : '#888'}
-            />
-          }
-        />
+          <SettingRow
+            icon="calendar-outline"
+            label="Repeat On"
+            value={getSelectedDaysDisplay()}
+            onPress={() => setShowDayPicker(true)}
+          />
 
-        <SettingRow
-          label="Repeat On"
-          value={getSelectedDaysDisplay()}
-          onPress={() => setShowDayPicker(true)}
-        />
-
-        <SettingRow
-          label="Duration"
-          value={duration}
-          onPress={() => {
-            Alert.alert('Set Duration', '', [
-              { text: '30 min', onPress: () => setDuration('30 min') },
-              { text: '1h', onPress: () => setDuration('1h') },
-              { text: '2h', onPress: () => setDuration('2h') },
-              { text: '3h', onPress: () => setDuration('3h') },
-              { text: '4h', onPress: () => setDuration('4h') },
-              { text: 'Custom', onPress: () => setDuration('Custom') },
-            ]);
-          }}
-        />
-
-        <SettingRow
-          label="Checklist"
-          value={selectedChecklist?.title || 'None'}
-          onPress={() => setShowChecklistPicker(true)}
-        />
-
-        <SettingRow
-          label="Shortcuts"
-          value={shortcuts}
-          onPress={() => router.push('/goal-shortcuts')}
-        />
+          <SettingRow
+            icon="timer-outline"
+            label="Duration"
+            value={duration}
+            onPress={() => setShowDurationPicker(true)}
+          />
+        </View>
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -389,82 +333,73 @@ export default function EditGoal() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Checklist Picker Modal */}
-      <Modal visible={showChecklistPicker} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowChecklistPicker(false)}>
+      {/* Duration Picker Modal */}
+      <Modal visible={showDurationPicker} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowDurationPicker(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select Checklist</Text>
-                  <TouchableOpacity onPress={() => setShowChecklistPicker(false)}>
+                  <Text style={styles.modalTitle}>Set Duration</Text>
+                  <TouchableOpacity onPress={() => setShowDurationPicker(false)}>
                     <View style={styles.closeButton}>
                       <Text style={styles.closeButtonText}>Close</Text>
                     </View>
                   </TouchableOpacity>
                 </View>
-                {availableChecklists.length === 0 ? (
-                  <View style={styles.noChecklistsContainer}>
-                    <Ionicons name="document-text-outline" size={48} color="#333" />
-                    <Text style={styles.noChecklistsTitle}>No Checklists Yet</Text>
-                    <Text style={styles.noChecklistsText}>
-                      Create checklists from the Settings page first.
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.createChecklistButton}
-                      onPress={() => {
-                        setShowChecklistPicker(false);
-                        router.push('/new-checklist');
-                      }}
-                    >
-                      <Text style={styles.createChecklistButtonText}>Create Checklist</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <>
-                    <FlatList
-                      data={availableChecklists}
-                      keyExtractor={(_, i) => i.toString()}
-                      renderItem={({ item }) => {
-                        const isSelected = selectedChecklist?.index === item.index;
-                        return (
-                          <TouchableOpacity
-                            style={[styles.checklistItem, isSelected && styles.checklistItemSelected]}
-                            onPress={() => {
-                              setSelectedChecklist(item);
-                              setShowChecklistPicker(false);
-                            }}
-                          >
-                            <View style={styles.checklistItemLeft}>
-                              <Ionicons name={item.icon as any || 'list-outline'} size={24} color={isSelected ? '#fff' : '#888'} />
-                              <Text style={[styles.checklistItemText, isSelected && styles.checklistItemTextSelected]}>
-                                {item.title}
-                              </Text>
-                            </View>
-                            {isSelected && (
-                              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                    <TouchableOpacity
-                      style={styles.createNewButton}
-                      onPress={() => {
-                        setShowChecklistPicker(false);
-                        router.push('/new-checklist');
-                      }}
-                    >
-                      <Ionicons name="add-circle-outline" size={20} color="#fff" />
-                      <Text style={styles.createNewText}>Create New Checklist</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
+                {['30 min', '1h', '2h', '3h', '4h', 'Custom'].map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[
+                      styles.durationOption,
+                      duration === opt && styles.durationOptionSelected,
+                    ]}
+                    onPress={() => {
+                      setDuration(opt);
+                      setShowDurationPicker(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.durationOptionText,
+                      duration === opt && styles.durationOptionTextSelected,
+                    ]}>{opt}</Text>
+                    {duration === opt && <Ionicons name="checkmark" size={20} color="#fff" />}
+                  </TouchableOpacity>
+                ))}
               </View>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <CustomAlert
+        visible={showRequiredAlert}
+        title="Required"
+        message="Please enter a goal title."
+        onConfirm={() => setShowRequiredAlert(false)}
+        singleButton
+      />
+
+      <CustomAlert
+        visible={showSavedAlert}
+        title="Saved"
+        message="Goal updated successfully"
+        onConfirm={() => router.replace('/home-customize')}
+        singleButton
+      />
+
+      <CustomAlert
+        visible={showDeleteAlert}
+        title="Delete Goal"
+        message="Are you sure you want to delete this goal?"
+        cancelText="Cancel"
+        confirmText="Delete"
+        onCancel={() => setShowDeleteAlert(false)}
+        onConfirm={() => {
+          deleteGoal(goalId);
+          router.replace('/home-customize');
+        }}
+      />
     </View>
   );
 }
@@ -502,15 +437,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
+  content: { flex: 1 },
+  section: { marginHorizontal: 16, marginBottom: 20 },
   previewCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#0a0a0a',
-    marginVertical: 16,
+    margin: 16,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
@@ -533,48 +466,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  titleInput: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    backgroundColor: '#0a0a0a',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#1a1a1a',
-  },
-  sectionTitle: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
-  },
-  settingLabel: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  settingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  settingValue: {
-    color: '#888',
-    fontSize: 15,
-  },
+  titleInput: { color: '#fff', fontSize: 16, backgroundColor: '#0a0a0a', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, marginHorizontal: 16, marginBottom: 20, borderWidth: 1, borderColor: '#1a1a1a' },
+  sectionTitle: { color: '#888', fontSize: 13, fontWeight: '600', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  optionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0a0a0a', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: '#1a1a1a' },
+  optionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  optionLabel: { color: '#fff', fontSize: 15 },
+  optionRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  optionValue: { color: '#888', fontSize: 15 },
   colorPreview: {
     width: 24,
     height: 24,
@@ -695,7 +593,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
   },
-  checklistItem: {
+  durationOption: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -707,66 +605,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2a',
   },
-  checklistItemSelected: {
+  durationOptionSelected: {
     borderColor: '#fff',
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  checklistItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  checklistItemText: {
+  durationOptionText: {
     color: '#fff',
     fontSize: 16,
   },
-  checklistItemTextSelected: {
+  durationOptionTextSelected: {
     color: '#fff',
     fontWeight: '600',
-  },
-  noChecklistsContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-  noChecklistsTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  noChecklistsText: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  createChecklistButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  createChecklistButtonText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  createNewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
-  },
-  createNewText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
   },
 });

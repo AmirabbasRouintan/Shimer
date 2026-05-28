@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import React, { useState, useCallback } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -8,8 +8,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
+import CustomAlert from "../components/CustomAlert";
 
 const suggestedApps = [
   { name: "Spotify", icon: "musical-notes", color: "#1DB954" },
@@ -33,6 +35,13 @@ export default function NewShortcutScreen() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
+  const [showUnavailableAlert, setShowUnavailableAlert] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setShowUnavailableAlert(true);
+    }, [])
+  );
 
   const filteredApps = suggestedApps.filter((app) =>
     app.name.toLowerCase().includes(search.toLowerCase()),
@@ -94,6 +103,14 @@ export default function NewShortcutScreen() {
         ))}
       </ScrollView>
 
+      <CustomAlert
+        visible={showUnavailableAlert}
+        title="Coming Soon"
+        message="This feature is not available in this version. The developer will release it in a future update."
+        onConfirm={() => router.replace("/settings")}
+        confirmText="OK"
+        singleButton
+      />
 
     </View>
   );

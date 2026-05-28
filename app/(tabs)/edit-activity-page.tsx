@@ -18,9 +18,33 @@ const iconOptions = [
 ];
 
 const colorOptions = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
+  '#FF6B6B', '#fff', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
   '#98D8C8', '#F7B731', '#FF9F4A', '#E8635E', '#6C5CE7', '#A8E6CF',
+  '#FF8C42', '#4A90E2', '#50E3C2', '#F5A623', '#7ED321', '#9013FE',
+  '#417505', '#BD10E0', '#8B572A', '#2C3E50', '#E91E63', '#9B59B6',
 ];
+
+// Custom Alert Modal Component
+const CustomAlert = ({ visible, title, message, onConfirm, onCancel }: any) => {
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.alertOverlay}>
+        <View style={styles.alertContainer}>
+          <Text style={styles.alertTitle}>{title}</Text>
+          <Text style={styles.alertMessage}>{message}</Text>
+          <View style={styles.alertButtons}>
+            <TouchableOpacity style={styles.alertCancelButton} onPress={onCancel}>
+              <Text style={styles.alertCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.alertConfirmButton} onPress={onConfirm}>
+              <Text style={styles.alertConfirmText}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 export default function EditActivityPage() {
   const router = useRouter();
@@ -36,6 +60,10 @@ export default function EditActivityPage() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showChecklistPicker, setShowChecklistPicker] = useState(false);
   const [availableChecklists, setAvailableChecklists] = useState<{ title: string; icon: string; index: number }[]>([]);
+
+  // Custom alert states
+  const [showUnlinkGoalAlert, setShowUnlinkGoalAlert] = useState(false);
+  const [pendingGoalId, setPendingGoalId] = useState<number | null>(null);
 
   // Form states - initialize from store
   const [formName, setFormName] = useState(params.name as string || activity?.name || '');
@@ -69,21 +97,17 @@ export default function EditActivityPage() {
   };
 
   const handleUnlinkGoal = (goalId: number) => {
-    Alert.alert(
-      'Remove Goal',
-      'Remove this goal from the activity?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            unlinkGoalFromActivity(activityId, goalId);
-            loadLinkedGoals();
-          }
-        }
-      ]
-    );
+    setPendingGoalId(goalId);
+    setShowUnlinkGoalAlert(true);
+  };
+
+  const confirmUnlinkGoal = () => {
+    if (pendingGoalId !== null) {
+      unlinkGoalFromActivity(activityId, pendingGoalId);
+      loadLinkedGoals();
+      setShowUnlinkGoalAlert(false);
+      setPendingGoalId(null);
+    }
   };
 
   const handleUnlinkChecklist = () => {
@@ -311,6 +335,18 @@ export default function EditActivityPage() {
         <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
         <Text style={styles.deleteButtonText}>Delete</Text>
       </TouchableOpacity>
+
+      {/* Custom Unlink Goal Alert */}
+      <CustomAlert
+        visible={showUnlinkGoalAlert}
+        title="Remove Goal"
+        message="Remove this goal from the activity?"
+        onConfirm={confirmUnlinkGoal}
+        onCancel={() => {
+          setShowUnlinkGoalAlert(false);
+          setPendingGoalId(null);
+        }}
+      />
 
       {/* Icon Picker Modal */}
       <Modal visible={showIconPicker} transparent animationType="slide">
@@ -805,5 +841,59 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Custom Alert Styles
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 320,
+  },
+  alertTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  alertMessage: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  alertCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#0a0a0a',
+  },
+  alertCancelText: {
+    color: '#888',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  alertConfirmButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#FF453A',
+  },
+  alertConfirmText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
