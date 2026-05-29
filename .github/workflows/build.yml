@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -16,13 +17,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
       - name: Fix registry URLs in lockfile and install
         run: |
           sed -i 's|https://package-mirror\.liara\.ir/repository/npm/|https://registry.npmjs.org/|g' package-lock.json
           npm install
       - run: npx expo prebuild --no-install
+      - name: Write optimized gradle.properties
+        run: |
+          cat > android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          android.useAndroidX=true
+          android.enablePngCrunchInReleaseBuilds=false
+          reactNativeArchitectures=arm64-v8a
+          newArchEnabled=true
+          hermesEnabled=true
+          edgeToEdgeEnabled=true
+          expo.gif.enabled=true
+          expo.webp.enabled=true
+          expo.webp.animated=false
+          EX_DEV_CLIENT_NETWORK_INSPECTOR=true
+          expo.useLegacyPackaging=true
+          expo.edgeToEdgeEnabled=true
+          EOF
       - name: Build Release APK
-        run: cd android && ./gradlew assembleRelease
+        run: |
+          cd android && ./gradlew assembleRelease \
+            --max-workers 3 \
+            --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
