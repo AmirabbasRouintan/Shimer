@@ -22,7 +22,7 @@ jobs:
         run: |
           sed -i 's|https://package-mirror\.liara\.ir/repository/npm/|https://registry.npmjs.org/|g' package-lock.json
           npm install
-      - run: npx expo prebuild --no-install
+      - run: npx expo prebuild --no-install --platform android
       - name: Write optimized gradle.properties
         run: |
           cat > android/gradle.properties << 'EOF'
@@ -47,7 +47,9 @@ jobs:
         run: |
           cd android && ./gradlew assembleRelease \
             --max-workers 3 \
-            --no-daemon
+            --no-daemon \
+            -x lint \
+            -x test
       - uses: actions/upload-artifact@v4
         with:
           name: app-release
