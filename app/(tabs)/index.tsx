@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import CustomAlert from "../components/CustomAlert";
 
 const { width: screenWidth } = Dimensions.get('window');
 const store: Record<string, any> = {};
@@ -68,6 +69,7 @@ export default function IndexScreen() {
 
   // Max suspended alert
   const [showMaxSuspendedAlert, setShowMaxSuspendedAlert] = useState(false);
+  const [showNoActivityAlert, setShowNoActivityAlert] = useState(false);
 
   // Track current session for logging
   const currentSessionRef = useRef<ActiveSession | null>(null);
@@ -884,18 +886,8 @@ export default function IndexScreen() {
         return;
       }
 
-      // No suspended items — just stop the break
-      stopAllIntervals();
-      isUpdatingTimerRef.current = true;
-      setActiveTimer(null);
-      isUpdatingTimerRef.current = false;
-      setActiveTimerRemainingSec(null);
-      setActiveTimerColor(null);
-      setActiveTimerTitle(null);
-      remainingSecondsRef.current = null;
-      timerStartTimeRef.current = null;
-      setBreakNotified(false);
-      setTimerType('idle');
+      // No suspended items — just show alert, keep break running
+      setShowNoActivityAlert(true);
       return;
     }
 
@@ -1232,7 +1224,7 @@ export default function IndexScreen() {
               <Ionicons name="pause-circle" size={20} color={suspendedGoal.color} />
               <Text style={[styles.pausedActivityPill, { color: suspendedGoal.color }]}>Goal</Text>
               <Text style={styles.pausedActivityText}>{suspendedGoal.title}</Text>
-              <Text style={[styles.pausedActivityResume, { color: suspendedGoal.color }]}>{formatTimeMMSS(suspendedGoal.remainingSeconds)}</Text>
+              <Text style={[styles.pausedActivityResume, { color: suspendedGoal.color, backgroundColor: suspendedGoal.color + '26' }]}>{formatTimeMMSS(suspendedGoal.remainingSeconds)}</Text>
             </TouchableOpacity>
           )}
 
@@ -1242,7 +1234,7 @@ export default function IndexScreen() {
                 <Ionicons name="pause-circle" size={20} color={item.color} />
                 <Text style={[styles.pausedActivityPill, { color: item.color }]}>Activity</Text>
                 <Text style={styles.pausedActivityText}>{item.name}</Text>
-                <Text style={[styles.pausedActivityResume, { color: item.color }]}>{formatTimeMMSS(item.remainingSeconds)}</Text>
+                <Text style={[styles.pausedActivityResume, { color: item.color, backgroundColor: item.color + '26' }]}>{formatTimeMMSS(item.remainingSeconds)}</Text>
               </TouchableOpacity>
             ))
           )}
@@ -1331,6 +1323,14 @@ export default function IndexScreen() {
           </View>
         </View>
       </Modal>
+      <CustomAlert
+        visible={showNoActivityAlert}
+        title="No Activity"
+        message="You have no activity to resume. Add an activity to start counting."
+        onConfirm={() => setShowNoActivityAlert(false)}
+        confirmText="OK"
+        singleButton
+      />
     </View>
   );
 }
@@ -1350,7 +1350,7 @@ const styles = StyleSheet.create({
   pausedActivityButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 5, gap: 10, alignSelf: 'flex-start' },
   pausedActivityText: { color: '#fff', fontSize: 13, fontWeight: '500', flex: 1 },
   pausedActivityPill: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  pausedActivityResume: { fontSize: 12, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  pausedActivityResume: { fontSize: 12, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, overflow: 'hidden' },
   separator: { height: 1, backgroundColor: '#2a2a2a', marginVertical: 12 },
   checklistSection: { width: '100%', padding: 16, marginTop: 20, marginBottom: 20 },
   checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
