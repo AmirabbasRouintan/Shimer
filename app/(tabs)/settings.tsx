@@ -235,18 +235,13 @@ export default function SettingsScreen() {
 
   const saveToPhoneStorage = async (fileUri: string, fileName: string) => {
     try {
-      const isSharingAvailable = await Sharing.isAvailableAsync();
-      if (isSharingAvailable) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: "application/json",
-          dialogTitle: "Save Backup",
-          UTI: "public.json",
-        });
-        Alert.alert("Success", "Backup file is ready. You can now choose where to save it.");
-      } else {
-        Alert.alert("Error", "Saving to storage is not available on this device.");
-      }
-    } catch (error) {
+      const directory = await Directory.pickDirectoryAsync();
+      const content = await new File(fileUri).text();
+      const newFile = directory.createFile(fileName.replace('.json', ''), "application/json");
+      await newFile.write(content);
+      Alert.alert("Success", "Backup saved successfully!");
+    } catch (error: any) {
+      if (error?.message?.includes('cancel') || error?.message?.includes('Cancel')) return;
       console.error("Save to storage error:", error);
       Alert.alert("Error", "Could not save file. Please try again.");
     }
