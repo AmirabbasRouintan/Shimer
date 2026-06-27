@@ -3,7 +3,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   FlatList,
-  Keyboard,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Header } from "@/components/Header";
 import { shadcn } from "../../constants/components-theme";
 import { addChecklist } from "../activitiesStore";
 
@@ -127,17 +127,7 @@ export default function NewChecklistScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/settings")}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Checklist</Text>
-        <TouchableOpacity onPress={handleSave}>
-          <View style={styles.saveButtonContainer}>
-            <Text style={styles.saveText}>Save</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <Header title="New Checklist" leftAction={{ label: 'Cancel', onPress: () => router.push("/settings") }} rightAction={{ label: 'Save', onPress: handleSave }} />
 
       <ScrollView
         style={styles.content}
@@ -269,31 +259,7 @@ export default function NewChecklistScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  saveButtonContainer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  saveText: {
-    color: '#000',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+
   content: { flex: 1, paddingHorizontal: 16 },
   titleRow: {
     flexDirection: "row",

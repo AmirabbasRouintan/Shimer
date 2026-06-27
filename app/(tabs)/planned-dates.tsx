@@ -7,7 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getDailyPlan, setDailyPlan } from '../activitiesStore';
-import { shadcn } from '../../constants/components-theme';
+import { Header } from '@/components/Header';
 
 // Swipeable Row Component
 const SwipeablePlanRow = ({ item, onDelete, onPress }: any) => {
@@ -183,14 +183,7 @@ export default function PlannedDatesScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Single Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerLeft}>
-          <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Saved Plans</Text>
-        <View style={styles.headerRight} />
-      </View>
+      <Header title="Saved Plans" onBack={() => router.back()} />
 
       {plannedDates.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -225,31 +218,6 @@ export default function PlannedDatesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerLeft: {
-    position: 'absolute',
-    left: 16,
-    top: 60,
-  },
-  headerRight: {
-    position: 'absolute',
-    right: 16,
-    top: 60,
-    width: 60,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',

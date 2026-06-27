@@ -6,8 +6,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Header } from '@/components/Header';
 import { Audio } from 'expo-av';
-import { File, Directory, Paths } from 'expo-file-system';
+import { documentDirectory, makeDirectoryAsync, writeAsStringAsync, readAsStringAsync, copyAsync } from 'expo-file-system/legacy';
 
 interface VoiceNote {
   id: string;
@@ -17,8 +18,8 @@ interface VoiceNote {
   createdAt: string;
 }
 
-const VOICE_NOTES_DIR = new Directory(Paths.document, 'voice_notes');
-const VOICE_NOTES_LIST_FILE = new File(VOICE_NOTES_DIR, 'notes.json');
+const VOICE_NOTES_DIR = `${documentDirectory}voice_notes/`;
+const VOICE_NOTES_LIST_FILE = `${VOICE_NOTES_DIR}notes.json`;
 
 export default function VoiceNotesScreen() {
   const router = useRouter();
@@ -42,7 +43,6 @@ export default function VoiceNotesScreen() {
     new Animated.Value(5)
   ]).current;
 
-  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
   const meterInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -74,15 +74,10 @@ export default function VoiceNotesScreen() {
 
   const loadVoiceNotes = async () => {
     try {
-      if (!VOICE_NOTES_DIR.exists) {
-        VOICE_NOTES_DIR.create({ intermediates: true });
-      }
-
-      if (VOICE_NOTES_LIST_FILE.exists) {
-        const content = await VOICE_NOTES_LIST_FILE.text();
-        const notes = JSON.parse(content);
-        setVoiceNotes(notes);
-      }
+      await makeDirectoryAsync(VOICE_NOTES_DIR, { intermediates: true });
+      const content = await readAsStringAsync(VOICE_NOTES_LIST_FILE);
+      const notes = JSON.parse(content);
+      setVoiceNotes(notes);
     } catch (error) {
       console.error('Error loading voice notes:', error);
     }
@@ -90,7 +85,7 @@ export default function VoiceNotesScreen() {
 
   const saveVoiceNotesList = async (notes: VoiceNote[]) => {
     try {
-      await VOICE_NOTES_LIST_FILE.write(JSON.stringify(notes, null, 2));
+      await writeAsStringAsync(VOICE_NOTES_LIST_FILE, JSON.stringify(notes, null, 2));
     } catch (error) {
       console.error('Error saving voice notes list:', error);
     }
@@ -109,7 +104,6 @@ export default function VoiceNotesScreen() {
   };
 
   const startVisualizer = () => {
-    // Animate bars randomly to simulate sound
     const animate = () => {
       if (!isRecording) return;
 
@@ -192,18 +186,14 @@ export default function VoiceNotesScreen() {
     if (!pendingRecordingUri || !newTitle.trim()) return;
 
     try {
-      if (!VOICE_NOTES_DIR.exists) {
-        VOICE_NOTES_DIR.create({ intermediates: true });
-      }
+      await makeDirectoryAsync(VOICE_NOTES_DIR, { intermediates: true });
 
       const fileName = `${Date.now()}.m4a`;
-      const newFile = new File(VOICE_NOTES_DIR, fileName);
+      const newFileUri = `${VOICE_NOTES_DIR}${fileName}`;
 
-      const tempFile = new File(pendingRecordingUri);
-      tempFile.copy(newFile);
+      await copyAsync({ from: pendingRecordingUri, to: newFileUri });
 
-      // Get duration
-      const { sound: audioSound } = await Audio.Sound.createAsync({ uri: newFile.uri });
+      const { sound: audioSound } = await Audio.Sound.createAsync({ uri: pendingRecordingUri });
       const status = await audioSound.getStatusAsync();
       const duration = status.isLoaded ? (status.durationMillis || 0) : 0;
       await audioSound.unloadAsync();
@@ -211,7 +201,7 @@ export default function VoiceNotesScreen() {
       const newNote: VoiceNote = {
         id: Date.now().toString(),
         title: newTitle.trim(),
-        uri: newFile.uri,
+        uri: newFileUri,
         duration: duration,
         createdAt: new Date().toISOString(),
       };
@@ -278,11 +268,6 @@ export default function VoiceNotesScreen() {
             const note = voiceNotes.find(n => n.id === noteId);
             if (note) {
               try {
-                const fileToDelete = new File(note.uri);
-                if (fileToDelete.exists) {
-                  fileToDelete.delete();
-                }
-
                 const updatedNotes = voiceNotes.filter(n => n.id !== noteId);
                 setVoiceNotes(updatedNotes);
                 await saveVoiceNotesList(updatedNotes);
@@ -325,13 +310,7 @@ export default function VoiceNotesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerLeft}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Voice Notes</Text>
-        <View style={styles.headerRight} />
-      </View>
+      <Header title="Voice Notes" onBack={() => router.back()} />
 
       <ScrollView style={styles.notesList} showsVerticalScrollIndicator={false}>
         {voiceNotes.length === 0 ? (
@@ -466,31 +445,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  headerLeft: {
-    position: 'absolute',
-    left: 16,
-    top: 60,
-  },
-  headerRight: {
-    position: 'absolute',
-    right: 16,
-    top: 60,
-    width: 40,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+
   notesList: {
     flex: 1,
     paddingHorizontal: 16,

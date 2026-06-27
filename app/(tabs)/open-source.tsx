@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
+import { Header } from "@/components/Header";
 import {
   Linking,
   ScrollView,
@@ -93,17 +94,7 @@ export default function OpenSourceScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color={shadcn.colors.foreground}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Open Source</Text>
-        <View style={styles.headerRight} />
-      </View>
+      <Header title="Open Source" onBack={() => router.push("/settings")} />
 
       <ScrollView style={styles.content}>
         <Text style={styles.sectionTitle}>Our Code</Text>
@@ -114,7 +105,7 @@ export default function OpenSourceScreen() {
 
         <TouchableOpacity
           style={styles.linkRow}
-          onPress={() => Linking.openURL("https://github.com/ixiflower")}
+          onPress={() => Linking.openURL("https://github.com/AmirabbasRouintan/Shimer")}
         >
           <Ionicons
             name="logo-github"
@@ -177,29 +168,6 @@ export default function OpenSourceScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    position: "relative",
-  },
-  headerLeft: {
-    width: 60,
-    alignItems: "flex-start",
-  },
-  headerRight: {
-    width: 60,
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-    flex: 1,
-  },
   content: { flex: 1, paddingHorizontal: 16 },
   sectionTitle: {
     color: shadcn.colors.foreground,

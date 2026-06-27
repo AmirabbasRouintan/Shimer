@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
+import { Header } from '@/components/Header';
 import {
   Alert, Animated, Modal, PanResponder, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -197,17 +198,7 @@ export default function FoldersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.headerLeft}>
-          <Ionicons name="arrow-back" size={25} color={shadcn.colors.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Folders</Text>
-        <TouchableOpacity onPress={() => setShowNewModal(true)} style={styles.headerRight}>
-          <View style={styles.addButtonHeader}>
-            <Text style={styles.addButtonHeaderText}>Add</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <Header title="Folders" onBack={() => router.push('/settings')} rightAction={{ label: 'Add', onPress: () => setShowNewModal(true) }} />
 
       <ScrollView style={styles.content} contentContainerStyle={{ paddingTop: 16, paddingBottom: 100 }}>
         {folders.map((folder, idx) => (
@@ -294,40 +285,6 @@ export default function FoldersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    marginBottom: shadcn.spacing.lg,
-  },
-  headerLeft: {
-    width: 70,
-  },
-  headerRight: {
-    width: 70,
-    alignItems: 'flex-end',
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 20,
-    fontWeight: "600",
-    textAlign: 'center',
-    flex: 1,
-  },
-  addButtonHeader: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  addButtonHeaderText: {
-    color: '#000',
-    fontSize: 13,
-    fontWeight: '600',
-  },
   content: { flex: 1, paddingHorizontal: 16 },
   swipeContainer: { marginBottom: 8, position: 'relative' },
   deleteButton: {

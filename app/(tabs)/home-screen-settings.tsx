@@ -6,6 +6,7 @@ import {
   FlatList, Switch, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Header } from '@/components/Header';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import DragList from 'react-native-draglist';
@@ -178,17 +179,7 @@ export default function HomeCustomizeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/settings')}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Customize Home</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <View style={styles.doneButtonContainer}>
-            <Text style={styles.doneText}>Done</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <Header title="Customize Home" onBack={() => router.push('/settings')} rightAction={{ label: 'Done', onPress: () => router.back() }} />
 
       <View style={styles.content}>
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -405,16 +396,7 @@ export default function HomeCustomizeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16 },
   cancelText: { color: '#fff', fontSize: 16 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  doneButtonContainer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  doneText: { color: '#000', fontSize: 13, fontWeight: '600' },
   content: { flex: 1 },
   scrollView: { flex: 1 },
   checklistSection: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 20 },

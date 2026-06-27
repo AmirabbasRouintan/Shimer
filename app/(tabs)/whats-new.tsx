@@ -6,10 +6,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
+import { Header } from "@/components/Header";
 
 export default function WhatsNewScreen() {
   const router = useRouter();
@@ -35,17 +35,7 @@ export default function WhatsNewScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/settings")} style={styles.backButton}>
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color={shadcn.colors.foreground}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>What's New</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <Header title="What's New" onBack={() => router.push("/settings")} />
 
       <ScrollView
         style={styles.content}
@@ -124,24 +114,6 @@ export default function WhatsNewScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: shadcn.colors.border,
-  },
-  backButton: {
-    width: 40,
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 18,
-    fontWeight: "600",
-  },
   content: { flex: 1, paddingHorizontal: 16 },
 
   versionBadge: {

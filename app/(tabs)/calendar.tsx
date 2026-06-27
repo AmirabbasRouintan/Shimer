@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Header } from '@/components/Header';
 import JSONPlanner from '../../components/JSONPlanner';
 import { getCalendarEvents, addCalendarEvent, deleteCalendarEvent, getDailyPlan, setDailyPlan } from '../activitiesStore';
 
@@ -256,28 +257,26 @@ export default function CalendarScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header with integrated month navigation */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.monthNavContainer}>
-          <TouchableOpacity onPress={goToPrevMonth}>
-            <Ionicons name="chevron-back" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => {
-            const today = new Date();
-            setCurrentDate(today);
-            setSelectedDay(today.getDate());
-          }}>
-            <Text style={styles.headerTitle}>{monthNames[month]} {year}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={goToNextMonth}>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={{ width: 22 }} />
-      </View>
+      <Header
+        onBack={() => router.back()}
+        centerContent={
+          <View style={styles.monthNavContainer}>
+            <TouchableOpacity onPress={goToPrevMonth}>
+              <Ionicons name="chevron-back" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              const today = new Date();
+              setCurrentDate(today);
+              setSelectedDay(today.getDate());
+            }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>{monthNames[month]} {year}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToNextMonth}>
+              <Ionicons name="chevron-forward" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        }
+      />
 
       {/* Day Headers */}
       <View style={styles.weekDays}>
@@ -560,16 +559,11 @@ export default function CalendarScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 60, paddingHorizontal: 16, paddingBottom: 16,
-  },
   monthNavContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
   },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
   weekDays: { flexDirection: 'row', paddingHorizontal: 8, marginBottom: 8 },
   weekDayText: { flex: 1, color: '#666', fontSize: 12, textAlign: 'center' },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8 },

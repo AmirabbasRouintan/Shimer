@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Header } from '@/components/Header';
 import DragList from 'react-native-draglist';
 import { getChecklists, updateChecklist, deleteChecklist, Checklist, ChecklistItem } from '../activitiesStore';
 import { shadcn } from '@/constants/components-theme';
@@ -145,6 +145,11 @@ export default function EditChecklistScreen() {
     }
   };
 
+  const handleSave = () => {
+    cleanupEmptyItems();
+    router.back();
+  };
+
   const renderItem = ({ item, index, onDragStart, onDragEnd, isActive }: any) => {
     return (
       <TouchableOpacity
@@ -194,17 +199,7 @@ export default function EditChecklistScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Checklist</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <View style={styles.doneButtonContainer}>
-            <Text style={styles.doneText}>Done</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <Header title="Edit Checklist" onBack={() => router.back()} rightAction={{ label: 'Done', onPress: handleSave }} />
 
       {/* Title section - not scrollable */}
       <View style={styles.titleSection}>
@@ -310,31 +305,7 @@ export default function EditChecklistScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  cancelText: { color: shadcn.colors.foreground, fontSize: 16 },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  doneButtonContainer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  doneText: {
-    color: '#000',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+
   titleSection: {
     paddingHorizontal: 16,
     paddingBottom: 12,

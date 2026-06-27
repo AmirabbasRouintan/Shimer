@@ -3,12 +3,10 @@ import { useRouter } from "expo-router";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { shadcn } from "../../constants/components-theme";
 
 const store: Record<string, any> = {};
 
@@ -27,12 +25,8 @@ export default function NotesListScreen() {
   }, [loadNotes]);
 
   useEffect(() => {
-    const unsubscribe = () => {};
     const interval = setInterval(loadNotes, 1000);
-    return () => {
-      clearInterval(interval);
-      unsubscribe();
-    };
+    return () => clearInterval(interval);
   }, [loadNotes]);
 
   const grouped = notes.reduce((acc: Record<string, any[]>, note) => {
@@ -71,23 +65,23 @@ export default function NotesListScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View className="flex-1 bg-black pt-[60px]">
+      <View className="flex-row justify-between items-center px-4 pb-4">
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.cancelText}>Back</Text>
+          <Text className="text-white text-base">Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notes</Text>
+        <Text className="text-white text-lg font-semibold">Notes</Text>
         <TouchableOpacity onPress={() => router.push("/new-note")}>
           <Ionicons name="add-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+      <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 40 }}>
         {notes.length === 0 && (
-          <View style={styles.empty}>
+          <View className="items-center justify-center py-20">
             <Ionicons name="document-text-outline" size={48} color="#333" />
-            <Text style={styles.emptyTitle}>No notes yet</Text>
-            <Text style={styles.emptySubtext}>Tap + to create your first note</Text>
+            <Text className="text-gray-400 text-lg mt-4 font-medium">No notes yet</Text>
+            <Text className="text-gray-500 text-sm mt-2">Tap + to create your first note</Text>
           </View>
         )}
 
@@ -95,34 +89,38 @@ export default function NotesListScreen() {
           const isExpanded = expandedCategories.has(cat);
           const catNotes = grouped[cat];
           return (
-            <View key={cat} style={styles.categorySection}>
-              <TouchableOpacity style={styles.categoryHeader} onPress={() => toggleCategory(cat)} activeOpacity={0.7}>
+            <View key={cat} className="mb-1">
+              <TouchableOpacity
+                className="flex-row items-center gap-2 py-3 px-1 border-b-[0.5px] border-[#1a1a1a]"
+                onPress={() => toggleCategory(cat)}
+                activeOpacity={0.7}
+              >
                 <Ionicons
                   name={isExpanded ? "chevron-down" : "chevron-forward"}
                   size={16}
                   color="#888"
                 />
                 <Ionicons name="folder-outline" size={18} color="#888" />
-                <Text style={styles.categoryTitle}>{cat}</Text>
-                <View style={styles.categoryCount}>
-                  <Text style={styles.categoryCountText}>{catNotes.length}</Text>
+                <Text className="text-white text-base font-semibold flex-1">{cat}</Text>
+                <View className="bg-[#1a1a1a] rounded-xl px-2 py-0.5">
+                  <Text className="text-gray-400 text-xs font-medium">{catNotes.length}</Text>
                 </View>
               </TouchableOpacity>
 
               {isExpanded && catNotes.map((note: any) => (
                 <TouchableOpacity
                   key={note.id}
-                  style={styles.noteRow}
+                  className="flex-row items-center gap-2.5 py-2.5 pl-10 pr-1 border-b-[0.5px] border-[#111]"
                   onPress={() => handleNotePress(note)}
                   activeOpacity={0.6}
                 >
-                  <View style={styles.noteIcon}>
-                    <Ionicons name="document-text-outline" size={16} color={shadcn.colors.mutedForeground} />
+                  <View className="w-5 items-center">
+                    <Ionicons name="document-text-outline" size={16} color="#a3a3a3" />
                   </View>
-                  <View style={styles.noteInfo}>
-                    <Text style={styles.noteTitle} numberOfLines={1}>{note.title}</Text>
-                    <Text style={styles.notePreview} numberOfLines={1}>{getTitlePreview(note)}</Text>
-                    <Text style={styles.noteDate}>{formatDate(note.createdAt)}</Text>
+                  <View className="flex-1">
+                    <Text className="text-white text-sm font-medium mb-0.5" numberOfLines={1}>{note.title}</Text>
+                    <Text className="text-gray-500 text-xs mb-0.5" numberOfLines={1}>{getTitlePreview(note)}</Text>
+                    <Text className="text-gray-600 text-[10px]">{formatDate(note.createdAt)}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={14} color="#444" />
                 </TouchableOpacity>
@@ -134,54 +132,3 @@ export default function NotesListScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', paddingTop: 60 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  cancelText: { color: '#fff', fontSize: 16 },
-  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  list: { flex: 1, paddingHorizontal: 16 },
-  listContent: { paddingBottom: 40 },
-  empty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
-  emptyTitle: { color: '#888', fontSize: 18, marginTop: 16, fontWeight: '500' },
-  emptySubtext: { color: '#555', fontSize: 14, marginTop: 8 },
-  categorySection: { marginBottom: 4 },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#1a1a1a',
-  },
-  categoryTitle: { color: '#fff', fontSize: 15, fontWeight: '600', flex: 1 },
-  categoryCount: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  categoryCountText: { color: '#888', fontSize: 12, fontWeight: '500' },
-  noteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    paddingLeft: 40,
-    paddingRight: 4,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#111',
-  },
-  noteIcon: { width: 20, alignItems: 'center' },
-  noteInfo: { flex: 1 },
-  noteTitle: { color: '#fff', fontSize: 14, fontWeight: '500', marginBottom: 2 },
-  notePreview: { color: '#555', fontSize: 11, marginBottom: 2 },
-  noteDate: { color: '#444', fontSize: 10 },
-});

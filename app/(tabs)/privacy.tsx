@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,23 +9,16 @@ import {
   View
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
+import { Header } from "@/components/Header";
+import CustomAlert from "../components/CustomAlert";
 
 export default function PrivacyScreen() {
   const router = useRouter();
+  const [showCopiedAlert, setShowCopiedAlert] = useState(false);
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color={shadcn.colors.foreground}
-          />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Privacy</Text>
-        <View style={styles.headerRight} />
-      </View>
+      <Header title="Privacy" onBack={() => router.push("/settings")} />
 
       <ScrollView style={styles.content}>
         <Text style={styles.lastUpdated}>Last updated: May 9, 2026</Text>
@@ -135,9 +127,9 @@ export default function PrivacyScreen() {
             <Text style={[styles.bold, styles.highlight]}>amirabbas.rouintan2007@gmail.com</Text>
             <TouchableOpacity
               onPress={() => {
-                import('expo-clipboard').then(({ Clipboard }) => {
-                  Clipboard.setStringAsync('amirabbas.rouintan2007@gmail.com');
-                  Alert.alert("Copied!", "Email address copied to clipboard");
+                import('expo-clipboard').then((mod) => {
+                  mod.setStringAsync('amirabbas.rouintan2007@gmail.com');
+                  setShowCopiedAlert(true);
                 });
               }}
               style={styles.copyButton}
@@ -149,35 +141,22 @@ export default function PrivacyScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <CustomAlert
+        visible={showCopiedAlert}
+        title="Copied!"
+        message="Email address copied to clipboard"
+        onConfirm={() => setShowCopiedAlert(false)}
+        confirmText="OK"
+        singleButton
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    position: "relative",
-  },
-  headerLeft: {
-    width: 60,
-    alignItems: "flex-start",
-  },
-  headerRight: {
-    width: 60,
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-    flex: 1,
-  },
+
   content: { flex: 1, paddingHorizontal: 16 },
   lastUpdated: {
     color: shadcn.colors.mutedForeground,

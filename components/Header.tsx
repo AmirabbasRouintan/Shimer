@@ -1,26 +1,50 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { shadcn } from '@/constants/components-theme';
+import type { ReactNode } from 'react';
 
-type HeaderProps = {
-  title: string;
-  onBack: () => void;
-  rightAction?: { label: string; onPress: () => void };
+type HeaderAction = {
+  label: string;
+  onPress: () => void;
 };
 
-export function Header({ title, onBack, rightAction }: HeaderProps) {
+type HeaderProps = {
+  title?: string;
+  onBack?: () => void;
+  leftAction?: HeaderAction;
+  rightAction?: HeaderAction & { variant?: 'pill' | 'text' };
+  centerContent?: ReactNode;
+};
+
+export function Header({ title, onBack, leftAction, rightAction, centerContent }: HeaderProps) {
+  const rightVariant = rightAction?.variant ?? 'pill';
+
   return (
     <View style={styles.header}>
-      <TouchableOpacity onPress={onBack} style={styles.headerLeft}>
-        <Ionicons name="arrow-back" size={25} color={shadcn.colors.foreground} />
-      </TouchableOpacity>
-      <Text style={styles.headerTitle}>{title}</Text>
-      <View style={styles.headerRight}>
+      <View style={styles.sideLeft}>
+        {leftAction ? (
+          <TouchableOpacity onPress={leftAction.onPress}>
+            <Text style={styles.leftText}>{leftAction.label}</Text>
+          </TouchableOpacity>
+        ) : onBack ? (
+          <TouchableOpacity onPress={onBack}>
+            <Ionicons name="arrow-back" size={22} color={shadcn.colors.foreground} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {centerContent ?? <Text style={styles.title} numberOfLines={1}>{title}</Text>}
+
+      <View style={styles.sideRight}>
         {rightAction && (
           <TouchableOpacity onPress={rightAction.onPress}>
-            <View style={styles.actionButton}>
-              <Text style={styles.actionText}>{rightAction.label}</Text>
-            </View>
+            {rightVariant === 'pill' ? (
+              <View style={styles.pill}>
+                <Text style={styles.pillText}>{rightAction.label}</Text>
+              </View>
+            ) : (
+              <Text style={styles.rightText}>{rightAction.label}</Text>
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -37,30 +61,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
   },
-  headerLeft: {
+  sideLeft: {
     width: 70,
     alignItems: 'flex-start',
   },
-  headerRight: {
+  sideRight: {
     width: 70,
     alignItems: 'flex-end',
   },
-  headerTitle: {
+  title: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
     flex: 1,
   },
-  actionButton: {
+  pill: {
     backgroundColor: '#fff',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 20,
   },
-  actionText: {
+  pillText: {
     color: '#000',
     fontSize: 13,
     fontWeight: '600',
+  },
+  leftText: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+  },
+  rightText: {
+    color: '#888',
+    fontSize: 16,
   },
 });

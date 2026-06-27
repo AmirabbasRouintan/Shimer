@@ -10,6 +10,7 @@ import {
   View,
   Alert,
 } from "react-native";
+import { Header } from "@/components/Header";
 import { shadcn } from "../../constants/components-theme";
 import { getDayStart, setDayStart, subscribe } from "../activitiesStore";
 
@@ -49,16 +50,7 @@ export default function DayStartScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header with red Cancel button and white Save button */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.cancelButton}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Day Start</Text>
-        <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-          <Text style={styles.doneText}>Save</Text>
-        </TouchableOpacity>
-      </View>
+      <Header title="Day Start" leftAction={{ label: 'Cancel', onPress: () => router.back() }} rightAction={{ label: 'Save', onPress: handleSave }} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {hours.map(hour => (
@@ -92,41 +84,7 @@ export default function DayStartScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  cancelButton: {
-    backgroundColor: '#FF453A',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  cancelText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  saveButton: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  doneText: {
-    color: '#000',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+
   content: { flex: 1, paddingHorizontal: 16 },
   hourRow: {
     flexDirection: "row",

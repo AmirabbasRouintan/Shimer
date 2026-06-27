@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { Header } from "@/components/Header";
 import { shadcn } from "../../constants/components-theme";
 
 export default function AskQuestionScreen() {
@@ -59,17 +60,7 @@ export default function AskQuestionScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push("/settings")} style={styles.headerLeft}>
-          <Ionicons name="arrow-back" size={22} color={shadcn.colors.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ask a Question</Text>
-        <TouchableOpacity onPress={handleClear} style={styles.headerRight}>
-          <View style={styles.clearButton}>
-            <Text style={styles.clearButtonText}>Clear</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <Header title="Ask a Question" onBack={() => router.push("/settings")} rightAction={{ label: 'Clear', onPress: handleClear, variant: 'text' }} />
 
       <ScrollView style={styles.content}>
         <Text style={styles.label}>Name</Text>
@@ -132,30 +123,7 @@ export default function AskQuestionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    position: "relative",
-  },
-  headerLeft: {
-    width: 60,
-    alignItems: "flex-start",
-  },
-  headerRight: {
-    width: 60,
-    alignItems: "flex-end",
-  },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 18,
-    fontWeight: "600",
-    textAlign: "center",
-    flex: 1,
-  },
+
   content: { flex: 1, paddingHorizontal: 16 },
   label: {
     color: shadcn.colors.mutedForeground,
@@ -195,15 +163,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     lineHeight: 20
   },
-  clearButton: {
-    backgroundColor: "#FF3B30", // or "#FF3B30" for red
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  clearButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+
 });
