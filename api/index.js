@@ -12,39 +12,53 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const JWT_SECRET = process.env.JWT_SECRET || "shimer-secret-change-in-production";
 const DATABASE_URL = process.env.DATABASE_URL;
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+let googleClient;
+try {
+  if (GOOGLE_CLIENT_ID) {
+    googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+  }
+} catch (e) {
+  console.error("Failed to create Google client:", e);
+}
 
+let dbInitialized = false;
 let sql;
 
 function getSql() {
-  if (!sql) {
+  if (!sql && DATABASE_URL) {
     sql = neon(DATABASE_URL);
   }
   return sql;
 }
 
-async function initDB() {
-  const db = getSql();
-  await db`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      google_id VARCHAR(255) UNIQUE NOT NULL,
-      email VARCHAR(255) UNIQUE NOT NULL,
-      name VARCHAR(255),
-      picture TEXT,
-      created_at TIMESTAMP DEFAULT NOW(),
-      last_login TIMESTAMP DEFAULT NOW()
-    );
-  `;
-  await db`
-    CREATE TABLE IF NOT EXISTS user_data (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      data JSONB NOT NULL DEFAULT '{}',
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `;
-  console.log("Database initialized");
+async function ensureDB() {
+  if (dbInitialized || !getSql()) return;
+  try {
+    const db = getSql();
+    await db`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        google_id VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255),
+        picture TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        last_login TIMESTAMP DEFAULT NOW()
+      );
+    `;
+    await db`
+      CREATE TABLE IF NOT EXISTS user_data (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        data JSONB NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+    dbInitialized = true;
+    console.log("Database initialized");
+  } catch (e) {
+    console.error("DB init error:", e);
+  }
 }
 
 function authMiddleware(req, res, next) {
@@ -64,9 +78,13 @@ function authMiddleware(req, res, next) {
 
 app.post("/api/auth/google", async (req, res) => {
   try {
+    await ensureDB();
     const { idToken } = req.body;
     if (!idToken) {
       return res.status(400).json({ error: "Missing idToken" });
+    }
+    if (!googleClient) {
+      return res.status(500).json({ error: "Google auth not configured" });
     }
 
     const ticket = await googleClient.verifyIdToken({
@@ -113,6 +131,7 @@ app.post("/api/auth/google", async (req, res) => {
 
 app.get("/api/auth/me", authMiddleware, async (req, res) => {
   try {
+    await ensureDB();
     const db = getSql();
     const users = await db`
       SELECT id, google_id, email, name, picture, created_at, last_login
@@ -130,12 +149,14 @@ app.get("/api/auth/me", authMiddleware, async (req, res) => {
 
     res.json({ user: users[0], hasData });
   } catch (error) {
+    console.error("Me error:", error);
     res.status(401).json({ error: "Invalid token" });
   }
 });
 
 app.get("/api/data", authMiddleware, async (req, res) => {
   try {
+    await ensureDB();
     const db = getSql();
     const rows = await db`
       SELECT data, updated_at FROM user_data WHERE user_id = ${req.user.userId}
@@ -154,6 +175,7 @@ app.get("/api/data", authMiddleware, async (req, res) => {
 
 app.put("/api/data", authMiddleware, async (req, res) => {
   try {
+    await ensureDB();
     const { data } = req.body;
     if (!data) {
       return res.status(400).json({ error: "Missing data" });
@@ -174,10 +196,19 @@ app.put("/api/data", authMiddleware, async (req, res) => {
   }
 });
 
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+app.get("/api/health", async (req, res) => {
+  try {
+    await ensureDB();
+    const db = getSql();
+    if (db) {
+      await db`SELECT 1`;
+      res.json({ status: "ok", db: "connected" });
+    } else {
+      res.json({ status: "ok", db: "no url configured" });
+    }
+  } catch (e) {
+    res.json({ status: "ok", db: "init failed" });
+  }
 });
-
-initDB();
 
 export default app;
