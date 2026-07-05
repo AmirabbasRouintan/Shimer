@@ -19,9 +19,11 @@ import {
   Vibration,
   View,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
 import CustomAlert from "../components/CustomAlert";
+import { useAuth } from "../auth/AuthContext";
 
 interface AppData {
   version: string;
@@ -419,6 +421,8 @@ export default function SettingsScreen() {
     </View>
   );
 
+  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signOut, syncLocalToCloud, syncCloudToLocal } = useAuth();
+
   return (
     <View style={styles.container}>
       {/* Header with back arrow */}
@@ -435,6 +439,73 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* ACCOUNT */}
+        <SectionHeader icon="person-outline" title="ACCOUNT" />
+        {user ? (
+          <>
+            <View style={styles.userInfoRow}>
+              {user.picture ? (
+                <Image source={{ uri: user.picture }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={22} color="#fff" />
+                </View>
+              )}
+              <View style={styles.userInfoText}>
+                <Text style={styles.userName}>{user.name}</Text>
+                <Text style={styles.userEmail}>{user.email}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncLocalToCloud}
+              disabled={isSyncing}
+            >
+              <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Local → Cloud"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncCloudToLocal}
+              disabled={isSyncing}
+            >
+              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signOut}>
+              <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
+              <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
+              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+          </>
+        ) : authLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signInWithGoogle}>
+            <Ionicons name="logo-google" size={22} color="#fff" />
+            <Text style={styles.rowText}>Sign in with Google</Text>
+            <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+          </TouchableOpacity>
+        )}
+
         {/* How to Use & What's New */}
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/how-to-use"); }}>
           <Ionicons name="information-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
@@ -745,6 +816,51 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     textAlign: 'center',
+  },
+  userInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: shadcn.spacing.md,
+    paddingHorizontal: shadcn.spacing.md,
+    borderRadius: shadcn.radius.lg,
+    marginBottom: shadcn.spacing.xs,
+    gap: shadcn.spacing.md,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  avatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#333",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userInfoText: {
+    flex: 1,
+  },
+  userName: {
+    color: shadcn.colors.foreground,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  userEmail: {
+    color: shadcn.colors.mutedForeground,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: shadcn.spacing.lg,
+    borderRadius: shadcn.radius.lg,
+    marginBottom: shadcn.spacing.xs,
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: shadcn.spacing.lg, paddingBottom: 40 },
