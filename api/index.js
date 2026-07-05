@@ -9,16 +9,24 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET || "shimer-secret-change-in-production";
 const DATABASE_URL = process.env.DATABASE_URL;
+const APP_REDIRECT_SCHEME = "Shimer";
 
 let googleClient;
+let googleOAuth2;
 try {
   if (GOOGLE_CLIENT_ID) {
     googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+    googleOAuth2 = new OAuth2Client(
+      GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET,
+      `${APP_REDIRECT_SCHEME}://auth-success`
+    );
   }
 } catch (e) {
-  console.error("Failed to create Google client:", e);
+  console.error("Failed to create Google clients:", e);
 }
 
 let dbInitialized = false;
@@ -76,6 +84,82 @@ function authMiddleware(req, res, next) {
   }
 }
 
+async function findOrCreateUser(google_id, email, name, picture) {
+  await ensureDB();
+  const db = getSql();
+  const users = await db`
+    INSERT INTO users (google_id, email, name, picture, last_login)
+    VALUES (${google_id}, ${email}, ${name}, ${picture}, NOW())
+    ON CONFLICT (google_id)
+    DO UPDATE SET email = ${email}, name = ${name}, picture = ${picture}, last_login = NOW()
+    RETURNING id, google_id, email, name, picture, created_at, last_login
+  `;
+  const user = users[0];
+  await db`
+    INSERT INTO user_data (user_id, data) VALUES (${user.id}, '{}')
+    ON CONFLICT (user_id) DO NOTHING
+  `;
+  return user;
+}
+
+function generateToken(user) {
+  return jwt.sign(
+    { userId: user.id, googleId: user.google_id, email: user.email },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+}
+
+// Start Google OAuth login
+app.get("/api/auth/google/login", (req, res) => {
+  if (!googleOAuth2) {
+    return res.status(500).send("Google OAuth not configured");
+  }
+  const authUrl = googleOAuth2.generateAuthUrl({
+    access_type: "offline",
+    scope: ["profile", "email"],
+    prompt: "select_account",
+  });
+  res.redirect(authUrl);
+});
+
+// Google OAuth callback
+app.get("/api/auth/google/callback", async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) {
+      return res.status(400).send("Missing authorization code");
+    }
+
+    const { tokens } = await googleOAuth2.getToken(code);
+    const idToken = tokens.id_token;
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: google_id, email, name, picture } = payload;
+
+    const user = await findOrCreateUser(google_id, email, name, picture);
+    const appToken = generateToken(user);
+
+    const dataRows = await getSql()`
+      SELECT data FROM user_data WHERE user_id = ${user.id}
+    `;
+    const hasData = dataRows[0]?.data && Object.keys(dataRows[0].data).length > 0;
+
+    res.redirect(
+      `${APP_REDIRECT_SCHEME}://auth-success?token=${appToken}&hasData=${hasData}`
+    );
+  } catch (error) {
+    console.error("OAuth callback error:", error);
+    res.status(500).send("Authentication failed");
+  }
+});
+
+// App sends idToken directly (for dev / fallback)
 app.post("/api/auth/google", async (req, res) => {
   try {
     await ensureDB();
@@ -94,35 +178,16 @@ app.post("/api/auth/google", async (req, res) => {
 
     const payload = ticket.getPayload();
     const { sub: google_id, email, name, picture } = payload;
-    const db = getSql();
 
-    const users = await db`
-      INSERT INTO users (google_id, email, name, picture, last_login)
-      VALUES (${google_id}, ${email}, ${name}, ${picture}, NOW())
-      ON CONFLICT (google_id)
-      DO UPDATE SET email = ${email}, name = ${name}, picture = ${picture}, last_login = NOW()
-      RETURNING id, google_id, email, name, picture, created_at, last_login
-    `;
+    const user = await findOrCreateUser(google_id, email, name, picture);
+    const appToken = generateToken(user);
 
-    const user = users[0];
-
-    await db`
-      INSERT INTO user_data (user_id, data) VALUES (${user.id}, '{}')
-      ON CONFLICT (user_id) DO NOTHING
-    `;
-
-    const token = jwt.sign(
-      { userId: user.id, googleId: user.google_id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "30d" }
-    );
-
-    const dataRows = await db`
+    const dataRows = await getSql()`
       SELECT data FROM user_data WHERE user_id = ${user.id}
     `;
     const hasData = dataRows[0]?.data && Object.keys(dataRows[0].data).length > 0;
 
-    res.json({ token, user, hasData });
+    res.json({ token: appToken, user, hasData });
   } catch (error) {
     console.error("Auth error:", error);
     res.status(401).json({ error: "Authentication failed" });

@@ -1,11 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
 import { AUTH_CONFIG } from "../../constants/auth";
-import { syncToCloud, syncFromCloud, loadAllData, collectAllData } from "./cloudSync";
-
-WebBrowser.maybeCompleteAuthSession();
+import { syncToCloud, syncFromCloud, loadAllData } from "./cloudSync";
 
 interface User {
   id: number;
@@ -48,10 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasCloudData, setHasCloudData] = useState(false);
 
-  const [, response, googlePrompt] = Google.useAuthRequest({
-    clientId: AUTH_CONFIG.GOOGLE_CLIENT_ID,
-  });
-
   useEffect(() => {
     (async () => {
       try {
@@ -74,46 +67,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  useEffect(() => {
-    if (response?.type === "success") {
-      handleGoogleResponse(response.params.id_token);
-    }
-  }, [response]);
-
-  const handleGoogleResponse = async (idToken: string) => {
+  const signInWithGoogle = useCallback(async () => {
     try {
-      setIsSyncing(true);
-      const res = await fetch(`${AUTH_CONFIG.BACKEND_URL}/api/auth/google`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${AUTH_CONFIG.BACKEND_URL}/api/auth/google/login`,
+        "Shimer://auth-success"
+      );
 
-      if (!res.ok) throw new Error("Auth failed");
+      if (result.type === "success" && result.url) {
+        const url = new URL(result.url);
+        const appToken = url.searchParams.get("token");
+        const hcd = url.searchParams.get("hasData") === "true";
 
-      const data = await res.json();
-      setToken(data.token);
-      setUser(data.user);
-      setHasCloudData(data.hasData);
-      await AsyncStorage.setItem("@auth_token", data.token);
+        if (appToken) {
+          setToken(appToken);
+          setHasCloudData(hcd);
+          await AsyncStorage.setItem("@auth_token", appToken);
 
-      if (data.hasData) {
-        const cloudData = await syncFromCloud(data.token);
-        loadAllData(cloudData.data);
-      } else {
-        await syncToCloud(data.token);
-        setHasCloudData(true);
+          // Fetch user info
+          const res = await fetch(`${AUTH_CONFIG.BACKEND_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${appToken}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data.user);
+          }
+
+          // Sync data
+          setIsSyncing(true);
+          try {
+            if (hcd) {
+              const cloudData = await syncFromCloud(appToken);
+              loadAllData(cloudData.data);
+            } else {
+              await syncToCloud(appToken);
+              setHasCloudData(true);
+            }
+          } finally {
+            setIsSyncing(false);
+          }
+        }
       }
     } catch (error) {
-      console.error("Google auth error:", error);
-    } finally {
-      setIsSyncing(false);
+      console.error("Google sign-in error:", error);
     }
-  };
-
-  const signInWithGoogle = useCallback(async () => {
-    await googlePrompt();
-  }, [googlePrompt]);
+  }, []);
 
   const signOut = useCallback(async () => {
     setUser(null);
