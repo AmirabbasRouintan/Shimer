@@ -332,7 +332,7 @@ app.put("/api/auth/profile", authMiddleware, async (req, res) => {
 
     values.push(req.user.userId);
     const query = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING id, google_id, email, name, picture, auth_provider, created_at, last_login`;
-    const users = await db(query, ...values);
+    const users = await db(query, values);
 
     res.json({ user: users[0] });
   } catch (error) {
