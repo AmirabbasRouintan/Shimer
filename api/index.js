@@ -321,18 +321,18 @@ app.put("/api/auth/profile", authMiddleware, async (req, res) => {
       }
     }
 
-    const updates = [];
-    if (name !== undefined) updates.push(db`name = ${name}`);
-    if (email !== undefined) updates.push(db`email = ${email}`);
-    if (picture !== undefined) updates.push(db`picture = ${picture}`);
-    if (updates.length === 0) {
+    const setClauses = [];
+    const values = [];
+    if (name !== undefined) { setClauses.push(`name = $${setClauses.length + 1}`); values.push(name); }
+    if (email !== undefined) { setClauses.push(`email = $${setClauses.length + 1}`); values.push(email); }
+    if (picture !== undefined) { setClauses.push(`picture = $${setClauses.length + 1}`); values.push(picture); }
+    if (setClauses.length === 0) {
       return res.status(400).json({ error: "No fields to update" });
     }
 
-    const users = await db`
-      UPDATE users SET ${db(updates)} WHERE id = ${req.user.userId}
-      RETURNING id, google_id, email, name, picture, auth_provider, created_at, last_login
-    `;
+    values.push(req.user.userId);
+    const query = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${values.length} RETURNING id, google_id, email, name, picture, auth_provider, created_at, last_login`;
+    const users = await db(query, ...values);
 
     res.json({ user: users[0] });
   } catch (error) {
