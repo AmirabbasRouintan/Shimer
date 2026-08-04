@@ -306,6 +306,76 @@ app.get("/api/auth/me", authMiddleware, async (req, res) => {
   }
 });
 
+app.put("/api/auth/profile", authMiddleware, async (req, res) => {
+  try {
+    await ensureDB();
+    const db = getSql();
+    const { name, email, picture } = req.body;
+
+    if (email) {
+      const existing = await db`
+        SELECT id FROM users WHERE email = ${email} AND id != ${req.user.userId}
+      `;
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "Email already in use" });
+      }
+    }
+
+    const updates = [];
+    if (name !== undefined) updates.push(db`name = ${name}`);
+    if (email !== undefined) updates.push(db`email = ${email}`);
+    if (picture !== undefined) updates.push(db`picture = ${picture}`);
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    const users = await db`
+      UPDATE users SET ${db(updates)} WHERE id = ${req.user.userId}
+      RETURNING id, google_id, email, name, picture, auth_provider, created_at, last_login
+    `;
+
+    res.json({ user: users[0] });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+app.put("/api/auth/password", authMiddleware, async (req, res) => {
+  try {
+    await ensureDB();
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current and new password are required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters" });
+    }
+
+    const db = getSql();
+    const users = await db`
+      SELECT id, password_hash, auth_provider FROM users WHERE id = ${req.user.userId}
+    `;
+
+    if (users.length === 0 || users[0].auth_provider !== 'email') {
+      return res.status(400).json({ error: "Password change only available for email accounts" });
+    }
+
+    const valid = await bcrypt.compare(currentPassword, users[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await db`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${req.user.userId}`;
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Password change error:", error);
+    res.status(500).json({ error: "Failed to change password" });
+  }
+});
+
 app.get("/api/data", authMiddleware, async (req, res) => {
   try {
     await ensureDB();

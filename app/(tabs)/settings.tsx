@@ -597,40 +597,6 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
-        {/* BACKUPS */}
-        <SectionHeader icon="cloud-outline" title="BACKUPS" />
-        <TouchableOpacity
-          style={styles.row}
-          activeOpacity={0.7}
-          onPress={handleBackupNow}
-          disabled={isCreatingBackup}
-        >
-          {isCreatingBackup ? (
-            <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-          ) : (
-            <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
-          )}
-          <Text style={styles.rowText}>
-            {isCreatingBackup ? "Creating Backup..." : "Create Backup"}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={handleRestoreBackup}>
-          <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-          <Text style={styles.rowText}>Restore Backup</Text>
-          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => setShowAutoBackupModal(true)}>
-          <Ionicons name="sync-outline" size={22} color="#fff" />
-          <Text style={styles.rowText}>Auto Backup</Text>
-          <Text style={styles.valueText}>
-            {backupFrequency === "manual" ? "Manual" : backupFrequency === "daily" ? "Daily" : backupFrequency === "weekly" ? "Weekly" : "Monthly"}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-        </TouchableOpacity>
-
         {/* NOTIFICATIONS */}
         <SectionHeader icon="notifications-outline" title="NOTIFICATIONS" />
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={openNotificationSettings}>
@@ -679,7 +645,11 @@ export default function SettingsScreen() {
         <SectionHeader icon="person-outline" title="ACCOUNT" />
         {user ? (
           <>
-            <View style={styles.userInfoRow}>
+            <TouchableOpacity
+              style={styles.userInfoRow}
+              activeOpacity={0.7}
+              onPress={() => router.push('/profile')}
+            >
               {user.picture ? (
                 <Image source={{ uri: user.picture }} style={styles.avatar} />
               ) : (
@@ -691,7 +661,7 @@ export default function SettingsScreen() {
                 <Text style={styles.userName}>{user.name}</Text>
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.7}
@@ -758,6 +728,42 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </>
         )}
+
+        {/* BACKUPS */}
+        <SectionHeader icon="cloud-outline" title="BACKUPS" />
+        <View style={styles.authGridRow}>
+          <TouchableOpacity
+            style={styles.authGridButton}
+            activeOpacity={0.7}
+            onPress={handleBackupNow}
+            disabled={isCreatingBackup}
+          >
+            {isCreatingBackup ? (
+              <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
+            )}
+            <Text style={styles.authGridText}>
+              {isCreatingBackup ? 'Creating...' : 'Create Backup'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.authGridButton}
+            activeOpacity={0.7}
+            onPress={handleRestoreBackup}
+          >
+            <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+            <Text style={styles.authGridText}>Restore Backup</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => setShowAutoBackupModal(true)}>
+          <Ionicons name="sync-outline" size={22} color="#fff" />
+          <Text style={styles.rowText}>Auto Backup</Text>
+          <Text style={styles.valueText}>
+            {backupFrequency === "manual" ? "Manual" : backupFrequency === "daily" ? "Daily" : backupFrequency === "weekly" ? "Weekly" : "Monthly"}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+        </TouchableOpacity>
 
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>Shimer</Text>
