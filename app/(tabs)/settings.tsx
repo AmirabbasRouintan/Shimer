@@ -901,7 +901,7 @@ export default function SettingsScreen() {
               disabled={authSubmitting}
             >
               {authSubmitting ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color="#000" />
               ) : (
                 <Text style={styles.authSubmitText}>
                   {authMode === 'login' ? 'Sign In' : 'Create Account'}
@@ -1159,7 +1159,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   authSegmentActive: {
-    backgroundColor: '#007aff',
+    backgroundColor: '#fafafa',
   },
   authSegmentText: {
     color: '#8e8e93',
@@ -1167,7 +1167,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   authSegmentTextActive: {
-    color: '#fff',
+    color: '#000',
   },
   authInputWrapper: {
     flexDirection: 'row',
@@ -1195,7 +1195,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   authSubmitButton: {
-    backgroundColor: '#007aff',
+    backgroundColor: '#fafafa',
     marginHorizontal: 24,
     marginTop: 6,
     paddingVertical: 14,
@@ -1203,10 +1203,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   authSubmitDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   authSubmitText: {
-    color: '#fff',
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },
