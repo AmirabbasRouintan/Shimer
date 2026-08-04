@@ -96,6 +96,7 @@ export default function SettingsScreen() {
   const [authName, setAuthName] = useState('');
   const [authError, setAuthError] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -736,7 +737,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={styles.authGridButton}
                 activeOpacity={0.7}
-                onPress={() => { setAuthMode('login'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+                onPress={() => { setAuthMode('login'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowPassword(false); setShowAuthModal(true); }}
               >
                 <Ionicons name="mail-outline" size={22} color="#fff" />
                 <Text style={styles.authGridText}>Login</Text>
@@ -744,7 +745,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={styles.authGridButton}
                 activeOpacity={0.7}
-                onPress={() => { setAuthMode('signup'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+                onPress={() => { setAuthMode('signup'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowPassword(false); setShowAuthModal(true); }}
               >
                 <Ionicons name="person-add-outline" size={22} color="#fff" />
                 <Text style={styles.authGridText}>Sign Up</Text>
@@ -883,8 +884,15 @@ export default function SettingsScreen() {
                 placeholderTextColor="#555"
                 value={authPassword}
                 onChangeText={setAuthPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.7}>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color="#888"
+                />
+              </TouchableOpacity>
             </View>
 
             {authError ? (
