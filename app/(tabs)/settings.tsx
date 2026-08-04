@@ -820,47 +820,82 @@ export default function SettingsScreen() {
       <Modal visible={showAuthModal} transparent animationType="fade">
         <View style={styles.autoBackupOverlay}>
           <View style={styles.authModal}>
-            <Text style={styles.autoBackupTitle}>
-              {authMode === 'login' ? 'Login' : 'Sign Up'}
+            <View style={styles.authHeaderRow}>
+              <Text style={styles.authTitle}>
+                {authMode === 'login' ? 'Welcome Back' : 'Join Shimer'}
+              </Text>
+            </View>
+            <Text style={styles.authSubtitle}>
+              {authMode === 'login'
+                ? 'Sign in to sync your data across devices'
+                : 'Create an account to get started'}
             </Text>
-            <Text style={styles.autoBackupSubtitle}>
-              {authMode === 'login' ? 'Sign in with your email' : 'Create a new account'}
-            </Text>
-            <View style={styles.autoBackupDivider} />
-            <View style={{ height: 12 }} />
+
+            <View style={styles.authSegmentRow}>
+              <TouchableOpacity
+                style={[styles.authSegment, authMode === 'login' && styles.authSegmentActive]}
+                activeOpacity={0.7}
+                onPress={() => { setAuthMode('login'); setAuthError(''); }}
+              >
+                <Text style={[styles.authSegmentText, authMode === 'login' && styles.authSegmentTextActive]}>
+                  Login
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.authSegment, authMode === 'signup' && styles.authSegmentActive]}
+                activeOpacity={0.7}
+                onPress={() => { setAuthMode('signup'); setAuthError(''); }}
+              >
+                <Text style={[styles.authSegmentText, authMode === 'signup' && styles.authSegmentTextActive]}>
+                  Sign Up
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {authMode === 'signup' && (
-              <TextInput
-                style={styles.authInput}
-                placeholder="Name (optional)"
-                placeholderTextColor="#666"
-                value={authName}
-                onChangeText={setAuthName}
-                autoCapitalize="words"
-              />
+              <View style={styles.authInputWrapper}>
+                <Ionicons name="person-outline" size={18} color="#888" style={styles.authInputIcon} />
+                <TextInput
+                  style={styles.authInputField}
+                  placeholder="Name (optional)"
+                  placeholderTextColor="#555"
+                  value={authName}
+                  onChangeText={setAuthName}
+                  autoCapitalize="words"
+                />
+              </View>
             )}
-            <TextInput
-              style={styles.authInput}
-              placeholder="Email"
-              placeholderTextColor="#666"
-              value={authEmail}
-              onChangeText={setAuthEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TextInput
-              style={styles.authInput}
-              placeholder="Password"
-              placeholderTextColor="#666"
-              value={authPassword}
-              onChangeText={setAuthPassword}
-              secureTextEntry
-            />
+            <View style={styles.authInputWrapper}>
+              <Ionicons name="mail-outline" size={18} color="#888" style={styles.authInputIcon} />
+              <TextInput
+                style={styles.authInputField}
+                placeholder="Email"
+                placeholderTextColor="#555"
+                value={authEmail}
+                onChangeText={setAuthEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+            <View style={styles.authInputWrapper}>
+              <Ionicons name="lock-closed-outline" size={18} color="#888" style={styles.authInputIcon} />
+              <TextInput
+                style={styles.authInputField}
+                placeholder="Password"
+                placeholderTextColor="#555"
+                value={authPassword}
+                onChangeText={setAuthPassword}
+                secureTextEntry
+              />
+            </View>
+
             {authError ? (
               <Text style={styles.authError}>{authError}</Text>
             ) : null}
+
             <TouchableOpacity
-              style={styles.authSubmitButton}
+              style={[styles.authSubmitButton, authSubmitting && styles.authSubmitDisabled]}
               activeOpacity={0.7}
               onPress={handleAuthSubmit}
               disabled={authSubmitting}
@@ -869,31 +904,17 @@ export default function SettingsScreen() {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.authSubmitText}>
-                  {authMode === 'login' ? 'Login' : 'Create Account'}
+                  {authMode === 'login' ? 'Sign In' : 'Create Account'}
                 </Text>
               )}
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={styles.authSwitchRow}
-              activeOpacity={0.7}
-              onPress={() => {
-                setAuthMode(authMode === 'login' ? 'signup' : 'login');
-                setAuthError('');
-              }}
-            >
-              <Text style={styles.authSwitchText}>
-                {authMode === 'login'
-                  ? "Don't have an account? Sign Up"
-                  : 'Already have an account? Login'}
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.autoBackupDivider} />
-            <TouchableOpacity
-              style={styles.autoBackupCancelButton}
+              style={styles.authCancelRow}
               activeOpacity={0.7}
               onPress={() => setShowAuthModal(false)}
             >
-              <Text style={styles.autoBackupCancelText}>Cancel</Text>
+              <Text style={styles.authCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1095,49 +1116,107 @@ const styles = StyleSheet.create({
 
   // Auth Modal Styles
   authModal: {
-    backgroundColor: '#0f0f11',
-    borderRadius: 14,
-    width: '85%',
-    maxWidth: 340,
+    backgroundColor: '#161618',
+    borderRadius: 20,
+    width: '88%',
+    maxWidth: 380,
     overflow: 'hidden',
+    paddingBottom: 16,
   },
-  authInput: {
+  authHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 28,
+    paddingHorizontal: 24,
+  },
+  authTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  authSubtitle: {
+    color: '#8e8e93',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 6,
+    paddingBottom: 20,
+  },
+  authSegmentRow: {
+    flexDirection: 'row',
+    marginHorizontal: 24,
     backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 20,
+  },
+  authSegment: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  authSegmentActive: {
+    backgroundColor: '#007aff',
+  },
+  authSegmentText: {
+    color: '#8e8e93',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  authSegmentTextActive: {
+    color: '#fff',
+  },
+  authInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 12,
+    marginHorizontal: 24,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+  },
+  authInputIcon: {
+    marginRight: 10,
+  },
+  authInputField: {
+    flex: 1,
     color: '#fff',
     fontSize: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 10,
+    paddingVertical: 14,
   },
   authError: {
     color: '#ff3b30',
     fontSize: 13,
     textAlign: 'center',
-    marginHorizontal: 20,
+    marginHorizontal: 24,
     marginBottom: 8,
   },
   authSubmitButton: {
     backgroundColor: '#007aff',
-    marginHorizontal: 20,
-    marginBottom: 10,
-    paddingVertical: 12,
-    borderRadius: 10,
+    marginHorizontal: 24,
+    marginTop: 6,
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
+  },
+  authSubmitDisabled: {
+    opacity: 0.6,
   },
   authSubmitText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  authSwitchRow: {
-    paddingVertical: 10,
+  authCancelRow: {
+    paddingTop: 12,
     alignItems: 'center',
   },
-  authSwitchText: {
-    color: '#007aff',
-    fontSize: 14,
+  authCancelText: {
+    color: '#8e8e93',
+    fontSize: 15,
   },
 
   // Auth Grid
