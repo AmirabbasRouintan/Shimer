@@ -735,24 +735,24 @@ export default function SettingsScreen() {
           </View>
         ) : (
           <>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={() => { setAuthMode('login'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
-            >
-              <Ionicons name="mail-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>Login</Text>
-              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={() => { setAuthMode('signup'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
-            >
-              <Ionicons name="person-add-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>Sign Up</Text>
-              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-            </TouchableOpacity>
+            <View style={styles.authGridRow}>
+              <TouchableOpacity
+                style={styles.authGridButton}
+                activeOpacity={0.7}
+                onPress={() => { setAuthMode('login'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+              >
+                <Ionicons name="mail-outline" size={22} color="#fff" />
+                <Text style={styles.authGridText}>Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.authGridButton}
+                activeOpacity={0.7}
+                onPress={() => { setAuthMode('signup'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+              >
+                <Ionicons name="person-add-outline" size={22} color="#fff" />
+                <Text style={styles.authGridText}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signInWithGoogle}>
               <Ionicons name="logo-google" size={22} color="#fff" />
               <Text style={styles.rowText}>Sign in with Google</Text>
@@ -1137,5 +1137,26 @@ const styles = StyleSheet.create({
   authSwitchText: {
     color: '#007aff',
     fontSize: 14,
+  },
+
+  // Auth Grid
+  authGridRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: shadcn.spacing.xs,
+  },
+  authGridButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: shadcn.colors.card,
+    paddingVertical: shadcn.spacing.md,
+    borderRadius: shadcn.radius.lg,
+    gap: 8,
+  },
+  authGridText: {
+    ...shadcn.typography.body,
+    color: shadcn.colors.foreground,
   },
 });
