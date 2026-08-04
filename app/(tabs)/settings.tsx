@@ -1142,8 +1142,8 @@ const styles = StyleSheet.create({
   // Auth Grid
   authGridRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: shadcn.spacing.xs,
+    gap: shadcn.spacing.sm,
+    marginBottom: shadcn.spacing.sm,
   },
   authGridButton: {
     flex: 1,
