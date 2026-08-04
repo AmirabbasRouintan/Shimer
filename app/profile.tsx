@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { shadcn } from '../constants/components-theme';
 import { useAuth } from './auth/AuthContext';
 import { AUTH_CONFIG } from '../constants/auth';
+import { Header } from '../components/Header';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -104,13 +105,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerLeft}>
-          <Ionicons name="arrow-back" size={24} color={shadcn.colors.foreground} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <View style={styles.headerRight} />
-      </View>
+      <Header title="Profile" onBack={() => router.back()} />
 
       <ScrollView
         style={styles.scrollView}
@@ -245,24 +240,6 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: shadcn.colors.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomColor: shadcn.colors.border,
-    marginBottom: shadcn.spacing.lg,
-  },
-  headerLeft: { position: 'absolute', left: 16, top: 60 },
-  headerRight: { position: 'absolute', right: 16, top: 60 },
-  headerTitle: {
-    color: shadcn.colors.foreground,
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   notLoggedIn: {
     color: shadcn.colors.mutedForeground,
     fontSize: 16,
