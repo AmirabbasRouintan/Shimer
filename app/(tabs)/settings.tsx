@@ -455,7 +455,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncLocalToCloud, syncCloudToLocal } = useAuth();
+  const { user, token, isLoading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut } = useAuth();
 
   return (
     <View style={styles.container}>
@@ -691,38 +691,6 @@ export default function SettingsScreen() {
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>
             </View>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={syncLocalToCloud}
-              disabled={isSyncing}
-            >
-              <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Local → Cloud"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
-                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={syncCloudToLocal}
-              disabled={isSyncing}
-            >
-              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
-                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-              )}
-            </TouchableOpacity>
             <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signOut}>
               <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
               <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
