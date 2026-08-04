@@ -455,7 +455,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const { user, token, isLoading: authLoading, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut } = useAuth();
+  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncCloudToLocal } = useAuth();
 
   return (
     <View style={styles.container}>
@@ -691,7 +691,36 @@ export default function SettingsScreen() {
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signOut}>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncCloudToLocal}
+              disabled={isSyncing}
+            >
+              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => {
+                Alert.alert(
+                  "Sign Out",
+                  "Are you sure you want to sign out?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Sign Out", style: "destructive", onPress: signOut },
+                  ]
+                );
+              }}
+            >
               <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
               <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
               <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
