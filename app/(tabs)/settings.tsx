@@ -827,6 +827,7 @@ export default function SettingsScreen() {
               {authMode === 'login' ? 'Sign in with your email' : 'Create a new account'}
             </Text>
             <View style={styles.autoBackupDivider} />
+            <View style={{ height: 12 }} />
             {authMode === 'signup' && (
               <TextInput
                 style={styles.authInput}
