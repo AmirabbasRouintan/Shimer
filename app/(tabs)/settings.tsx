@@ -20,6 +20,7 @@ import {
   View,
   ActivityIndicator,
   Image,
+  TextInput,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
 import CustomAlert from "../components/CustomAlert";
@@ -88,6 +89,13 @@ export default function SettingsScreen() {
   const [showNotesUnavailableAlert, setShowNotesUnavailableAlert] = useState(false);
   const [showSecureFilesUnavailableAlert, setShowSecureFilesUnavailableAlert] = useState(false);
   const [showShortcutUnavailableAlert, setShowShortcutUnavailableAlert] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -421,7 +429,33 @@ export default function SettingsScreen() {
     </View>
   );
 
-  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signOut, syncLocalToCloud, syncCloudToLocal } = useAuth();
+  const handleAuthSubmit = async () => {
+    setAuthError('');
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError('Please fill in all fields');
+      return;
+    }
+    setAuthSubmitting(true);
+    try {
+      let result: { error?: string };
+      if (authMode === 'signup') {
+        result = await signUpWithEmail(authEmail.trim(), authPassword, authName.trim() || undefined);
+      } else {
+        result = await signInWithEmail(authEmail.trim(), authPassword);
+      }
+      if (result.error) {
+        setAuthError(result.error);
+      } else {
+        setShowAuthModal(false);
+      }
+    } catch (e) {
+      setAuthError('Something went wrong. Please try again.');
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncLocalToCloud, syncCloudToLocal } = useAuth();
 
   return (
     <View style={styles.container}>
@@ -439,73 +473,6 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ACCOUNT */}
-        <SectionHeader icon="person-outline" title="ACCOUNT" />
-        {user ? (
-          <>
-            <View style={styles.userInfoRow}>
-              {user.picture ? (
-                <Image source={{ uri: user.picture }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={22} color="#fff" />
-                </View>
-              )}
-              <View style={styles.userInfoText}>
-                <Text style={styles.userName}>{user.name}</Text>
-                <Text style={styles.userEmail}>{user.email}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={syncLocalToCloud}
-              disabled={isSyncing}
-            >
-              <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Local → Cloud"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
-                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={syncCloudToLocal}
-              disabled={isSyncing}
-            >
-              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
-                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signOut}>
-              <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
-              <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
-              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-            </TouchableOpacity>
-          </>
-        ) : authLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signInWithGoogle}>
-            <Ionicons name="logo-google" size={22} color="#fff" />
-            <Text style={styles.rowText}>Sign in with Google</Text>
-            <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-          </TouchableOpacity>
-        )}
-
         {/* How to Use & What's New */}
         <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => { lightHaptic(); router.push("/how-to-use"); }}>
           <Ionicons name="information-circle-outline" size={22} color={shadcn.colors.mutedForeground} />
@@ -707,6 +674,93 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
         </TouchableOpacity>
 
+        {/* ACCOUNT */}
+        <SectionHeader icon="person-outline" title="ACCOUNT" />
+        {user ? (
+          <>
+            <View style={styles.userInfoRow}>
+              {user.picture ? (
+                <Image source={{ uri: user.picture }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={22} color="#fff" />
+                </View>
+              )}
+              <View style={styles.userInfoText}>
+                <Text style={styles.userName}>{user.name}</Text>
+                <Text style={styles.userEmail}>{user.email}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncLocalToCloud}
+              disabled={isSyncing}
+            >
+              <Ionicons name="cloud-upload-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Local → Cloud"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncCloudToLocal}
+              disabled={isSyncing}
+            >
+              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signOut}>
+              <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
+              <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
+              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+          </>
+        ) : authLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => { setAuthMode('login'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+            >
+              <Ionicons name="mail-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>Login</Text>
+              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => { setAuthMode('signup'); setAuthEmail(''); setAuthPassword(''); setAuthName(''); setAuthError(''); setShowAuthModal(true); }}
+            >
+              <Ionicons name="person-add-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>Sign Up</Text>
+              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={signInWithGoogle}>
+              <Ionicons name="logo-google" size={22} color="#fff" />
+              <Text style={styles.rowText}>Sign in with Google</Text>
+              <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+            </TouchableOpacity>
+          </>
+        )}
+
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>Shimer</Text>
           <Text style={styles.versionText}>v2026.1.0</Text>
@@ -761,6 +815,89 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Auth Modal */}
+      <Modal visible={showAuthModal} transparent animationType="fade">
+        <View style={styles.autoBackupOverlay}>
+          <View style={styles.authModal}>
+            <Text style={styles.autoBackupTitle}>
+              {authMode === 'login' ? 'Login' : 'Sign Up'}
+            </Text>
+            <Text style={styles.autoBackupSubtitle}>
+              {authMode === 'login' ? 'Sign in with your email' : 'Create a new account'}
+            </Text>
+            <View style={styles.autoBackupDivider} />
+            {authMode === 'signup' && (
+              <TextInput
+                style={styles.authInput}
+                placeholder="Name (optional)"
+                placeholderTextColor="#666"
+                value={authName}
+                onChangeText={setAuthName}
+                autoCapitalize="words"
+              />
+            )}
+            <TextInput
+              style={styles.authInput}
+              placeholder="Email"
+              placeholderTextColor="#666"
+              value={authEmail}
+              onChangeText={setAuthEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.authInput}
+              placeholder="Password"
+              placeholderTextColor="#666"
+              value={authPassword}
+              onChangeText={setAuthPassword}
+              secureTextEntry
+            />
+            {authError ? (
+              <Text style={styles.authError}>{authError}</Text>
+            ) : null}
+            <TouchableOpacity
+              style={styles.authSubmitButton}
+              activeOpacity={0.7}
+              onPress={handleAuthSubmit}
+              disabled={authSubmitting}
+            >
+              {authSubmitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.authSubmitText}>
+                  {authMode === 'login' ? 'Login' : 'Create Account'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.authSwitchRow}
+              activeOpacity={0.7}
+              onPress={() => {
+                setAuthMode(authMode === 'login' ? 'signup' : 'login');
+                setAuthError('');
+              }}
+            >
+              <Text style={styles.authSwitchText}>
+                {authMode === 'login'
+                  ? "Don't have an account? Sign Up"
+                  : 'Already have an account? Login'}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.autoBackupDivider} />
+            <TouchableOpacity
+              style={styles.autoBackupCancelButton}
+              activeOpacity={0.7}
+              onPress={() => setShowAuthModal(false)}
+            >
+              <Text style={styles.autoBackupCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <CustomAlert
         visible={showNotesUnavailableAlert}
         title="Coming Soon"
@@ -953,5 +1090,52 @@ const styles = StyleSheet.create({
     color: '#ff3b30',
     fontSize: 17,
     fontWeight: '500',
+  },
+
+  // Auth Modal Styles
+  authModal: {
+    backgroundColor: '#0f0f11',
+    borderRadius: 14,
+    width: '85%',
+    maxWidth: 340,
+    overflow: 'hidden',
+  },
+  authInput: {
+    backgroundColor: '#1c1c1e',
+    color: '#fff',
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 10,
+  },
+  authError: {
+    color: '#ff3b30',
+    fontSize: 13,
+    textAlign: 'center',
+    marginHorizontal: 20,
+    marginBottom: 8,
+  },
+  authSubmitButton: {
+    backgroundColor: '#007aff',
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  authSubmitText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  authSwitchRow: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  authSwitchText: {
+    color: '#007aff',
+    fontSize: 14,
   },
 });
