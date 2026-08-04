@@ -10,6 +10,7 @@ import { shadcn } from '../constants/components-theme';
 import { useAuth } from './auth/AuthContext';
 import { AUTH_CONFIG } from '../constants/auth';
 import { Header } from '../components/Header';
+import Toast, { ToastData } from '../components/Toast';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export default function ProfileScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
 
   const handleSaveProfile = async () => {
     if (!token) return;
@@ -38,12 +40,12 @@ export default function ProfileScreen() {
       });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert('Saved', 'Profile updated successfully');
+        setToast({ message: 'Profile saved successfully', type: 'success' });
       } else {
-        Alert.alert('Error', data.error || 'Failed to update profile');
+        setToast({ message: data.error || 'Failed to update profile', type: 'error' });
       }
     } catch {
-      Alert.alert('Error', 'Network error');
+      setToast({ message: 'Network error. Please try again.', type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -52,7 +54,7 @@ export default function ProfileScreen() {
   const handleChangePassword = async () => {
     if (!token) return;
     if (!currentPassword || !newPassword) {
-      Alert.alert('Error', 'Please fill both password fields');
+      setToast({ message: 'Please fill both password fields', type: 'error' });
       return;
     }
     setChangingPassword(true);
@@ -67,14 +69,14 @@ export default function ProfileScreen() {
       });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert('Saved', 'Password changed successfully');
+        setToast({ message: 'Password changed successfully', type: 'success' });
         setCurrentPassword('');
         setNewPassword('');
       } else {
-        Alert.alert('Error', data.error || 'Failed to change password');
+        setToast({ message: data.error || 'Failed to change password', type: 'error' });
       }
     } catch {
-      Alert.alert('Error', 'Network error');
+      setToast({ message: 'Network error. Please try again.', type: 'error' });
     } finally {
       setChangingPassword(false);
     }
@@ -105,7 +107,8 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="Profile" onBack={() => router.back()} />
+      <Header title="Profile" onBack={() => router.back()} rightAction={{ label: 'Save', onPress: handleSaveProfile }} />
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <ScrollView
         style={styles.scrollView}

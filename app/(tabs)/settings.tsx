@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
 import CustomAlert from "../components/CustomAlert";
+import Toast, { ToastData } from "../../components/Toast";
 import { useAuth } from "../auth/AuthContext";
 
 interface AppData {
@@ -89,6 +90,7 @@ export default function SettingsScreen() {
   const [showNotesUnavailableAlert, setShowNotesUnavailableAlert] = useState(false);
   const [showSecureFilesUnavailableAlert, setShowSecureFilesUnavailableAlert] = useState(false);
   const [showShortcutUnavailableAlert, setShowShortcutUnavailableAlert] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -244,17 +246,17 @@ export default function SettingsScreen() {
     };
   };
 
-  const saveToPhoneStorage = async (fileUri: string, fileName: string) => {
+      const saveToPhoneStorage = async (fileUri: string, fileName: string) => {
     try {
       const directory = await Directory.pickDirectoryAsync();
       const content = await new File(fileUri).text();
       const newFile = directory.createFile(fileName.replace('.json', ''), "application/json");
       await newFile.write(content);
-      Alert.alert("Success", "Backup saved successfully!");
+      setToast({ message: 'Backup saved successfully', type: 'success' });
     } catch (error: any) {
       if (error?.message?.includes('cancel') || error?.message?.includes('Cancel')) return;
       console.error("Save to storage error:", error);
-      Alert.alert("Error", "Could not save file. Please try again.");
+      setToast({ message: 'Could not save file. Please try again.', type: 'error' });
     }
   };
 
@@ -284,9 +286,9 @@ export default function SettingsScreen() {
             dialogTitle: "Share Shimer Backup",
             UTI: "public.json",
           });
-          Alert.alert("Success", "Backup shared successfully!");
+          setToast({ message: 'Backup shared successfully', type: 'success' });
         } else {
-          Alert.alert("Error", "Sharing is not available on this device.");
+          setToast({ message: 'Sharing is not available on this device.', type: 'error' });
         }
       } else if (action === 'save') {
         await saveToPhoneStorage(tempFile.uri, fileName);
@@ -302,7 +304,7 @@ export default function SettingsScreen() {
 
     } catch (error) {
       console.error("Backup error:", error);
-      Alert.alert("Error", "Failed to create backup. Please try again.");
+      setToast({ message: 'Failed to create backup. Please try again.', type: 'error' });
     } finally {
       setIsCreatingBackup(false);
     }
@@ -383,6 +385,7 @@ export default function SettingsScreen() {
                   setHomeScreenSummary(visible.length ? visible.join(", ") : "Nothing shown");
 
                   Alert.alert("Restored", "All data has been restored successfully.");
+                  setToast({ message: 'All data has been restored', type: 'success' });
                 } catch (restoreError) {
                   console.error("Restore error:", restoreError);
                   Alert.alert("Error", "Failed to restore backup. The file may be corrupted.");
@@ -460,6 +463,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
       {/* Header with back arrow */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.replace('/')} style={styles.headerLeft}>
@@ -665,7 +669,10 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.7}
-              onPress={syncCloudToLocal}
+              onPress={async () => {
+                await syncCloudToLocal();
+                setToast({ message: 'Data synced from cloud', type: 'success' });
+              }}
               disabled={isSyncing}
             >
               <Ionicons name="cloud-download-outline" size={22} color="#fff" />
