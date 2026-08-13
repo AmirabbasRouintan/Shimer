@@ -6,6 +6,20 @@ const data: Record<string, any> = {};
 let loaded = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+type Listener = (key?: string) => void;
+const listeners: Listener[] = [];
+let notifying = false;
+
+function notify(key?: string) {
+  if (notifying) return;
+  notifying = true;
+  try {
+    listeners.forEach((listener) => listener(key));
+  } finally {
+    notifying = false;
+  }
+}
+
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -16,6 +30,14 @@ function persist() {
       console.warn('Failed to save misc store', e);
     }
   }, 200);
+}
+
+export function subscribeMisc(listener: Listener) {
+  listeners.push(listener);
+  return () => {
+    const idx = listeners.indexOf(listener);
+    if (idx !== -1) listeners.splice(idx, 1);
+  };
 }
 
 export async function loadMiscStore() {
@@ -37,6 +59,7 @@ export const store: Record<string, any> = new Proxy(data, {
     if (typeof prop === 'string') {
       target[prop] = value;
       persist();
+      notify(prop);
     }
     return true;
   },

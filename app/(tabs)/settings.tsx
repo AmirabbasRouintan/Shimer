@@ -460,7 +460,31 @@ export default function SettingsScreen() {
     }
   };
 
-  const { user, token, isLoading: authLoading, isSyncing, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncCloudToLocal } = useAuth();
+  const { user, token, isLoading: authLoading, isSyncing, syncStatus, syncNow, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncCloudToLocal } = useAuth();
+
+  const syncState = syncStatus.state;
+  const syncIcon =
+    syncState === "syncing" ? "cloud-upload-outline" :
+    syncState === "synced" ? "checkmark-circle" :
+    syncState === "pending" ? "cloud-upload-outline" :
+    syncState === "offline" ? "cloud-offline-outline" :
+    syncState === "error" ? "alert-circle" :
+    "cloud-outline";
+  const syncColor =
+    syncState === "synced" ? "#34c759" :
+    syncState === "offline" ? "#ff9f0a" :
+    syncState === "error" ? "#ff3b30" :
+    "#fff";
+  const syncStatusText =
+    syncState === "syncing" ? "Syncing..." :
+    syncState === "synced" ? "All data synced" :
+    syncState === "pending" ? "Changes pending — will sync soon" :
+    syncState === "offline" ? "Offline — will sync when back online" :
+    syncState === "error" ? "Sync failed — will retry" :
+    "Ready to sync";
+  const lastSyncText = syncStatus.lastSyncedAt
+    ? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "Not synced yet";
 
   return (
     <View style={styles.container}>
@@ -666,6 +690,39 @@ export default function SettingsScreen() {
                 <Text style={styles.userName}>{user.name}</Text>
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>
+            </TouchableOpacity>
+            <View style={styles.row}>
+              <Ionicons name={syncIcon as any} size={22} color={syncColor} />
+              <View style={styles.syncStatusText}>
+                <Text style={[styles.rowText, { color: syncColor }]}>{syncStatusText}</Text>
+                <Text style={styles.syncLastText}>{lastSyncText}</Text>
+              </View>
+              {syncState === "syncing" ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <TouchableOpacity
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => setShowSyncInfoAlert(true)}
+                >
+                  <Ionicons name="information-circle-outline" size={20} color={shadcn.colors.mutedForeground} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={syncNow}
+              disabled={isSyncing}
+            >
+              <Ionicons name="sync-outline" size={22} color="#fff" />
+              <Text style={styles.rowText}>
+                {isSyncing ? "Syncing..." : "Sync Now"}
+              </Text>
+              {isSyncing ? (
+                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
+              ) : (
+                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+              )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.row}
@@ -1041,6 +1098,14 @@ const styles = StyleSheet.create({
   },
   userInfoText: {
     flex: 1,
+  },
+  syncStatusText: {
+    flex: 1,
+  },
+  syncLastText: {
+    ...shadcn.typography.caption,
+    color: shadcn.colors.mutedForeground,
+    marginTop: 2,
   },
   userName: {
     color: shadcn.colors.foreground,

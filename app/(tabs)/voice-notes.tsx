@@ -197,7 +197,9 @@ export default function VoiceNotesScreen() {
 
       const fileName = `${Date.now()}.m4a`;
       const newFile = new File(VOICE_NOTES_DIR, fileName);
-      newFile.create({ intermediates: true, overwrite: true });
+      if (newFile.exists) {
+        newFile.delete();
+      }
       new File(pendingRecordingUri).copy(newFile);
       const newFileUri = newFile.uri;
 
