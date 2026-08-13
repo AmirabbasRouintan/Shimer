@@ -19,6 +19,7 @@ import {
 import JSONPlanner from '../../components/JSONPlanner';
 import { Activity, Folder, getActivities, getCalendarEvents, getDailyPlan, getFolders, setActiveTimer, subscribe, getSuspendedGoal, getSuspendedActivities, setSuspendedGoal, removeSuspendedActivity, SuspendedGoalData, SuspendedActivityData } from '../activitiesStore';
 import { store } from '../miscStore';
+import CustomAlert from '../components/CustomAlert';
 
 // Swipeable Event Row Component (unchanged functionality, restyled)
 const SwipeableEventRow = ({ event, timeDisplay, onDelete, onPress }: any) => {
@@ -233,6 +234,7 @@ export default function MainScreen() {
   const [eventSelectedActivity, setEventSelectedActivity] = useState<Activity | null>(null);
   const [eventTimerHours, setEventTimerHours] = useState(0);
   const [eventTimerMinutes, setEventTimerMinutes] = useState(0);
+  const [showRequiredActivityAlert, setShowRequiredActivityAlert] = useState(false);
   const [showEventActivityPicker, setShowEventActivityPicker] = useState(false);
 
   // JSON Planner Modal States
@@ -330,7 +332,7 @@ export default function MainScreen() {
 
   const startEventTimer = () => {
     if (!eventSelectedActivity) {
-      Alert.alert('Required', 'Please select an activity.');
+      setShowRequiredActivityAlert(true);
       return;
     }
     const totalMinutes = eventTimerHours * 60 + eventTimerMinutes;
@@ -515,7 +517,7 @@ export default function MainScreen() {
       return;
     }
     if (!selectedActivity) {
-      Alert.alert('Required', 'Please select an activity.');
+      setShowRequiredActivityAlert(true);
       return;
     }
     const totalMinutes = timerHours * 60 + timerMinutes;
@@ -950,6 +952,17 @@ export default function MainScreen() {
           <JSONPlanner selectedDate={todayDate} initialPlan={todayPlan} onSave={handlePlannerSave} onClose={() => setShowPlannerModal(false)} />
         </View>
       </Modal>
+
+      {/* Required Activity Alert - Apple Style */}
+      <CustomAlert
+        visible={showRequiredActivityAlert}
+        title="Required"
+        message="Please select an activity."
+        confirmText="OK"
+        cancelText={null}
+        singleButton
+        onConfirm={() => setShowRequiredActivityAlert(false)}
+      />
     </View>
   );
 }
