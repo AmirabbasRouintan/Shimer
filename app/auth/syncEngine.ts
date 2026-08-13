@@ -25,6 +25,10 @@ export interface SyncStatusInfo {
 const LAST_FP_KEY = "__sync_last_fp";
 const LAST_AT_KEY = "__sync_last_at";
 const LOCAL_DIRTY_KEY = "__sync_local_dirty_at";
+const SYNC_INTERVAL_KEY = "__sync_interval_min";
+
+export const MIN_SYNC_INTERVAL_MINUTES = 20;
+export const DEFAULT_SYNC_INTERVAL_MINUTES = 30;
 
 let token: string | null = null;
 let state: SyncState = "idle";
@@ -33,8 +37,17 @@ let localDirtyAt: string | null = store[LOCAL_DIRTY_KEY] || null;
 let inFlight = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let periodicTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeActivities: (() => void) | null = null;
 let unsubscribeMisc: (() => void) | null = null;
+
+function readInterval(): number {
+  const raw = Number(store[SYNC_INTERVAL_KEY]);
+  if (!raw || Number.isNaN(raw)) return DEFAULT_SYNC_INTERVAL_MINUTES;
+  return Math.max(MIN_SYNC_INTERVAL_MINUTES, raw);
+}
+
+let syncIntervalMin = readInterval();
 
 const listeners: ((info: SyncStatusInfo) => void)[] = [];
 
@@ -68,6 +81,18 @@ export function subscribeSync(listener: (info: SyncStatusInfo) => void) {
 
 export function getSyncStatus(): SyncStatusInfo {
   return { state, lastSyncedAt, message: getMessage() };
+}
+
+export function getSyncIntervalMinutes(): number {
+  return syncIntervalMin;
+}
+
+// Min 20 minutes. Persisted across restarts.
+export function setSyncIntervalMinutes(minutes: number) {
+  const clamped = Math.max(MIN_SYNC_INTERVAL_MINUTES, Math.round(minutes));
+  syncIntervalMin = clamped;
+  store[SYNC_INTERVAL_KEY] = clamped;
+  restartPeriodicSync();
 }
 
 function markLocalDirty(key?: string) {
@@ -225,7 +250,21 @@ export function startAutoSync() {
       }
     }, 30000);
   }
+  startPeriodicSync();
   runSync().catch(() => {});
+}
+
+function startPeriodicSync() {
+  if (periodicTimer) clearInterval(periodicTimer);
+  periodicTimer = setInterval(() => {
+    runSync().catch(() => {});
+  }, syncIntervalMin * 60 * 1000);
+}
+
+function restartPeriodicSync() {
+  if (periodicTimer) {
+    startPeriodicSync();
+  }
 }
 
 export function stopAutoSync() {
@@ -244,6 +283,10 @@ export function stopAutoSync() {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
+  }
+  if (periodicTimer) {
+    clearInterval(periodicTimer);
+    periodicTimer = null;
   }
   state = "idle";
   emit();

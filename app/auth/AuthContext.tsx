@@ -6,8 +6,9 @@ import { syncToCloud, syncFromCloud, loadAllData } from "./cloudSync";
 import {
   subscribeSync,
   getSyncStatus,
+  getSyncIntervalMinutes,
+  setSyncIntervalMinutes,
   setSyncToken,
-  syncNow as engineSyncNow,
   stopAutoSync,
   SyncStatusInfo,
 } from "./syncEngine";
@@ -30,7 +31,8 @@ interface AuthContextType {
   isSyncing: boolean;
   hasCloudData: boolean;
   syncStatus: SyncStatusInfo;
-  syncNow: () => Promise<void>;
+  syncIntervalMinutes: number;
+  setSyncIntervalMinutes: (minutes: number) => void;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
   signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ error?: string }>;
@@ -46,7 +48,8 @@ const AuthContext = createContext<AuthContextType>({
   isSyncing: false,
   hasCloudData: false,
   syncStatus: { state: "idle", lastSyncedAt: null, message: "" },
-  syncNow: async () => {},
+  syncIntervalMinutes: 30,
+  setSyncIntervalMinutes: () => {},
   signInWithGoogle: async () => {},
   signInWithEmail: async () => ({}),
   signUpWithEmail: async () => ({}),
@@ -62,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasCloudData, setHasCloudData] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatusInfo>(getSyncStatus());
+  const [syncIntervalMinutes, setSyncIntervalMinutesState] = useState<number>(getSyncIntervalMinutes());
 
   useEffect(() => {
     const unsubscribe = subscribeSync(setSyncStatus);
@@ -212,19 +216,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
-  const syncNow = useCallback(async () => {
-    setIsSyncing(true);
-    try {
-      await engineSyncNow();
-    } finally {
-      setIsSyncing(false);
-    }
+  const handleSetSyncInterval = useCallback((minutes: number) => {
+    setSyncIntervalMinutesState(minutes);
+    setSyncIntervalMinutes(minutes);
   }, []);
 
   return (
     <AuthContext.Provider
       value={{
-        user, token, isLoading, isSyncing, hasCloudData, syncStatus, syncNow,
+        user, token, isLoading, isSyncing, hasCloudData, syncStatus,
+        syncIntervalMinutes, setSyncIntervalMinutes: handleSetSyncInterval,
         signInWithGoogle, signInWithEmail, signUpWithEmail, signOut,
         syncLocalToCloud, syncCloudToLocal,
       }}

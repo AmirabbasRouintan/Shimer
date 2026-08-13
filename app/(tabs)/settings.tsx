@@ -99,7 +99,7 @@ export default function SettingsScreen() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showSignOutAlert, setShowSignOutAlert] = useState(false);
-  const [showSyncInfoAlert, setShowSyncInfoAlert] = useState(false);
+  const [showSyncIntervalModal, setShowSyncIntervalModal] = useState(false);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -460,7 +460,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const { user, token, isLoading: authLoading, isSyncing, syncStatus, syncNow, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, syncCloudToLocal } = useAuth();
+  const { user, isLoading: authLoading, syncStatus, syncIntervalMinutes, setSyncIntervalMinutes, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut } = useAuth();
 
   const syncState = syncStatus.state;
   const syncIcon =
@@ -485,6 +485,12 @@ export default function SettingsScreen() {
   const lastSyncText = syncStatus.lastSyncedAt
     ? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
     : "Not synced yet";
+  const syncIntervalLabel =
+    syncIntervalMinutes < 60
+      ? `Auto-sync every ${syncIntervalMinutes} min`
+      : syncIntervalMinutes % 60 === 0
+        ? `Auto-sync every ${syncIntervalMinutes / 60} hr`
+        : `Auto-sync every ${syncIntervalMinutes} min`;
 
   return (
     <View style={styles.container}>
@@ -691,61 +697,21 @@ export default function SettingsScreen() {
                 <Text style={styles.userEmail}>{user.email}</Text>
               </View>
             </TouchableOpacity>
-            <View style={styles.row}>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={() => setShowSyncIntervalModal(true)}
+            >
               <Ionicons name={syncIcon as any} size={22} color={syncColor} />
               <View style={styles.syncStatusText}>
                 <Text style={[styles.rowText, { color: syncColor }]}>{syncStatusText}</Text>
                 <Text style={styles.syncLastText}>{lastSyncText}</Text>
+                <Text style={styles.syncLastText}>{syncIntervalLabel}</Text>
               </View>
               {syncState === "syncing" ? (
                 <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
               ) : (
-                <TouchableOpacity
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  onPress={() => setShowSyncInfoAlert(true)}
-                >
-                  <Ionicons name="information-circle-outline" size={20} color={shadcn.colors.mutedForeground} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={syncNow}
-              disabled={isSyncing}
-            >
-              <Ionicons name="sync-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Now"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
                 <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.row}
-              activeOpacity={0.7}
-              onPress={async () => {
-                await syncCloudToLocal();
-                setToast({ message: 'Data synced from cloud', type: 'success' });
-              }}
-              disabled={isSyncing}
-            >
-              <Ionicons name="cloud-download-outline" size={22} color="#fff" />
-              <Text style={styles.rowText}>
-                {isSyncing ? "Syncing..." : "Sync Cloud → Local"}
-              </Text>
-              {isSyncing ? (
-                <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
-              ) : (
-                <TouchableOpacity
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  onPress={() => setShowSyncInfoAlert(true)}
-                >
-                  <Ionicons name="information-circle-outline" size={20} color={shadcn.colors.mutedForeground} />
-                </TouchableOpacity>
               )}
             </TouchableOpacity>
             <TouchableOpacity
@@ -845,17 +811,6 @@ export default function SettingsScreen() {
         onCancel={() => setShowBackupAlert(false)}
       />
 
-      {/* Sync Cloud → Local Info Alert */}
-      <CustomAlert
-        visible={showSyncInfoAlert}
-        title="Sync Cloud → Local"
-        message="Downloads your data from the cloud and overwrites the local data on this device with the cloud version. Use this to restore your data on a new device or after reinstalling the app."
-        confirmText="OK"
-        cancelText={null}
-        singleButton
-        onConfirm={() => setShowSyncInfoAlert(false)}
-      />
-
       {/* Sign Out Confirmation - Apple Style Alert */}
       <CustomAlert
         visible={showSignOutAlert}
@@ -869,6 +824,44 @@ export default function SettingsScreen() {
         }}
         onCancel={() => setShowSignOutAlert(false)}
       />
+
+      {/* Sync Interval Modal */}
+      <Modal visible={showSyncIntervalModal} transparent animationType="fade">
+        <View style={styles.autoBackupOverlay}>
+          <View style={styles.autoBackupModal}>
+            <Text style={styles.autoBackupTitle}>Auto Sync</Text>
+            <Text style={styles.autoBackupSubtitle}>Choose how often your data syncs to the cloud</Text>
+            <View style={styles.autoBackupDivider} />
+            {[20, 30, 60, 120, 360].map((minutes) => {
+              const label = minutes < 60
+                ? `Every ${minutes} minutes`
+                : minutes === 60 ? "Every hour" : `${minutes / 60} hours`;
+              const selected = syncIntervalMinutes === minutes;
+              return (
+                <TouchableOpacity
+                  key={minutes}
+                  style={styles.autoBackupOption}
+                  activeOpacity={0.7}
+                  onPress={() => { setSyncIntervalMinutes(minutes); setShowSyncIntervalModal(false); }}
+                >
+                  <Text style={[styles.autoBackupOptionText, selected && styles.autoBackupOptionTextSelected]}>
+                    {label}
+                  </Text>
+                  {selected && <Ionicons name="checkmark" size={20} color="#007aff" />}
+                </TouchableOpacity>
+              );
+            })}
+            <View style={styles.autoBackupDivider} />
+            <TouchableOpacity
+              style={styles.autoBackupCancelButton}
+              activeOpacity={0.7}
+              onPress={() => setShowSyncIntervalModal(false)}
+            >
+              <Text style={styles.autoBackupCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Auto Backup Modal */}
       <Modal visible={showAutoBackupModal} transparent animationType="fade">
