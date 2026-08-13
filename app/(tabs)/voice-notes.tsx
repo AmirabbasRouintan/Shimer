@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Header } from '@/components/Header';
 import { Audio } from 'expo-av';
 import { File, Directory, Paths } from 'expo-file-system';
+import CustomAlert from '../components/CustomAlert';
 
 interface VoiceNote {
   id: string;
@@ -32,6 +33,7 @@ export default function VoiceNotesScreen() {
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [generatedName, setGeneratedName] = useState('');
+  const [showSaveSuccessAlert, setShowSaveSuccessAlert] = useState(false);
 
   // Animation values for visualizer
   const barHeights = useRef([
@@ -225,7 +227,7 @@ export default function VoiceNotesScreen() {
       setGeneratedName('');
       setPendingRecordingUri(null);
 
-      Alert.alert('Success', 'Voice note saved successfully!');
+      setShowSaveSuccessAlert(true);
     } catch (error) {
       console.error('Error saving voice note:', error);
       Alert.alert('Error', 'Failed to save voice note.');
@@ -446,6 +448,17 @@ export default function VoiceNotesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Save Success Alert - Apple Style */}
+      <CustomAlert
+        visible={showSaveSuccessAlert}
+        title="Success"
+        message="Voice note saved successfully!"
+        confirmText="OK"
+        cancelText={null}
+        singleButton
+        onConfirm={() => setShowSaveSuccessAlert(false)}
+      />
     </View>
   );
 }
