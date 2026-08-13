@@ -4,6 +4,7 @@ import { neon } from "@neondatabase/serverless";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import cloudinary from "cloudinary";
 
 const app = express();
 app.use(cors());
@@ -14,6 +15,12 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET || "shimer-secret-change-in-production";
 const DATABASE_URL = process.env.DATABASE_URL;
 const APP_REDIRECT_SCHEME = "Shimer";
+
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 let googleClient;
 let googleOAuth2;
@@ -415,6 +422,29 @@ app.put("/api/data", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Save data error:", error);
     res.status(500).json({ error: "Failed to save data" });
+  }
+});
+
+// Upload profile image to Cloudinary
+app.post("/api/upload/image", authMiddleware, async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: "Missing image" });
+    }
+
+    const result = await cloudinary.v2.uploader.upload(image, {
+      folder: "shimer/avatars",
+      transformation: [
+        { width: 500, height: 500, crop: "fill" },
+        { quality: "auto", fetch_format: "auto" },
+      ],
+    });
+
+    res.json({ url: result.secure_url });
+  } catch (error) {
+    console.error("Upload error:", error);
+    res.status(500).json({ error: "Failed to upload image" });
   }
 });
 

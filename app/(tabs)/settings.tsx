@@ -99,6 +99,8 @@ export default function SettingsScreen() {
   const [authError, setAuthError] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showSignOutAlert, setShowSignOutAlert] = useState(false);
+  const [showSyncInfoAlert, setShowSyncInfoAlert] = useState(false);
 
   // Subscribe to checklist changes
   useEffect(() => {
@@ -682,22 +684,18 @@ export default function SettingsScreen() {
               {isSyncing ? (
                 <ActivityIndicator size="small" color={shadcn.colors.mutedForeground} />
               ) : (
-                <Ionicons name="chevron-forward" size={18} color={shadcn.colors.mutedForeground} />
+                <TouchableOpacity
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => setShowSyncInfoAlert(true)}
+                >
+                  <Ionicons name="information-circle-outline" size={20} color={shadcn.colors.mutedForeground} />
+                </TouchableOpacity>
               )}
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.row}
               activeOpacity={0.7}
-              onPress={() => {
-                Alert.alert(
-                  "Sign Out",
-                  "Are you sure you want to sign out?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Sign Out", style: "destructive", onPress: signOut },
-                  ]
-                );
-              }}
+              onPress={() => setShowSignOutAlert(true)}
             >
               <Ionicons name="log-out-outline" size={22} color="#ff3b30" />
               <Text style={[styles.rowText, { color: "#ff3b30" }]}>Sign Out</Text>
@@ -789,6 +787,31 @@ export default function SettingsScreen() {
         onThirdButton={() => { setShowBackupAlert(false); handleCreateBackup('share'); }}
         onConfirm={() => { setShowBackupAlert(false); handleCreateBackup('save'); }}
         onCancel={() => setShowBackupAlert(false)}
+      />
+
+      {/* Sync Cloud → Local Info Alert */}
+      <CustomAlert
+        visible={showSyncInfoAlert}
+        title="Sync Cloud → Local"
+        message="Downloads your data from the cloud and overwrites the local data on this device with the cloud version. Use this to restore your data on a new device or after reinstalling the app."
+        confirmText="OK"
+        cancelText={null}
+        singleButton
+        onConfirm={() => setShowSyncInfoAlert(false)}
+      />
+
+      {/* Sign Out Confirmation - Apple Style Alert */}
+      <CustomAlert
+        visible={showSignOutAlert}
+        title="Sign Out"
+        message="Are you sure you want to sign out?"
+        confirmText="Sign Out"
+        cancelText="Cancel"
+        onConfirm={async () => {
+          setShowSignOutAlert(false);
+          await signOut();
+        }}
+        onCancel={() => setShowSignOutAlert(false)}
       />
 
       {/* Auto Backup Modal */}

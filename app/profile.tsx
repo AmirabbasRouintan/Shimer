@@ -26,6 +26,8 @@ export default function ProfileScreen() {
   const [changingPassword, setChangingPassword] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
 
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const handleSaveProfile = async () => {
     if (!token) return;
     setSaving(true);
@@ -93,7 +95,28 @@ export default function ProfileScreen() {
 
     if (!result.canceled && result.assets[0].base64) {
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      setPicture(base64);
+      setUploadingImage(true);
+      try {
+        const res = await fetch(`${AUTH_CONFIG.BACKEND_URL}/api/upload/image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ image: base64 }),
+        });
+        const data = await res.json();
+        if (res.ok && data.url) {
+          setPicture(data.url);
+          setToast({ message: 'Photo uploaded successfully', type: 'success' });
+        } else {
+          setToast({ message: data.error || 'Failed to upload photo', type: 'error' });
+        }
+      } catch {
+        setToast({ message: 'Network error. Please try again.', type: 'error' });
+      } finally {
+        setUploadingImage(false);
+      }
     }
   };
 
@@ -123,6 +146,11 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Ionicons name="person" size={40} color="#888" />
+              </View>
+            )}
+            {uploadingImage && (
+              <View style={styles.avatarUploadOverlay}>
+                <ActivityIndicator size="small" color="#fff" />
               </View>
             )}
             <View style={styles.cameraBadge}>
@@ -276,6 +304,13 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: '#fafafa',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 45,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
