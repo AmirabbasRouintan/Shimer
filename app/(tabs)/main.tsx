@@ -18,8 +18,7 @@ import {
 } from 'react-native';
 import JSONPlanner from '../../components/JSONPlanner';
 import { Activity, Folder, getActivities, getCalendarEvents, getDailyPlan, getFolders, setActiveTimer, subscribe, getSuspendedGoal, getSuspendedActivities, setSuspendedGoal, removeSuspendedActivity, SuspendedGoalData, SuspendedActivityData } from '../activitiesStore';
-
-const store = {};
+import { store } from '../miscStore';
 
 // Swipeable Event Row Component (unchanged functionality, restyled)
 const SwipeableEventRow = ({ event, timeDisplay, onDelete, onPress }: any) => {

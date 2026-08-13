@@ -26,6 +26,7 @@ import { shadcn } from "../../constants/components-theme";
 import CustomAlert from "../components/CustomAlert";
 import Toast, { ToastData } from "../../components/Toast";
 import { useAuth } from "../auth/AuthContext";
+import { store } from "../miscStore";
 
 interface AppData {
   version: string;
@@ -63,8 +64,6 @@ interface AppData {
   suspendedGoal: any;
   suspendedActivities: any[];
 }
-
-const store: Record<string, any> = {};
 
 const lightHaptic = () => {
   if (Platform.OS !== "web") Vibration.vibrate(10);

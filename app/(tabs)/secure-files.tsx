@@ -21,6 +21,7 @@ import {
   PanResponder,
 } from "react-native";
 import { shadcn } from "../../constants/components-theme";
+import { store } from "../miscStore";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -28,8 +29,6 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-const store: Record<string, any> = {};
 
 const PATTERN_DOTS = [
   [0, 0],

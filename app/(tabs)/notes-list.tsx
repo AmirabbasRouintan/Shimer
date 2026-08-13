@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const store: Record<string, any> = {};
+import { store } from "../miscStore";
 
 export default function NotesListScreen() {
   const router = useRouter();

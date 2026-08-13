@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/Header';
 import { Audio } from 'expo-av';
-import { documentDirectory, makeDirectoryAsync, writeAsStringAsync, readAsStringAsync, copyAsync } from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 
 interface VoiceNote {
   id: string;
@@ -18,8 +18,8 @@ interface VoiceNote {
   createdAt: string;
 }
 
-const VOICE_NOTES_DIR = `${documentDirectory}voice_notes/`;
-const VOICE_NOTES_LIST_FILE = `${VOICE_NOTES_DIR}notes.json`;
+const VOICE_NOTES_DIR = new Directory(Paths.document, 'voice_notes');
+const VOICE_NOTES_LIST_FILE = new File(VOICE_NOTES_DIR, 'notes.json');
 
 export default function VoiceNotesScreen() {
   const router = useRouter();
@@ -74,10 +74,14 @@ export default function VoiceNotesScreen() {
 
   const loadVoiceNotes = async () => {
     try {
-      await makeDirectoryAsync(VOICE_NOTES_DIR, { intermediates: true });
-      const content = await readAsStringAsync(VOICE_NOTES_LIST_FILE);
-      const notes = JSON.parse(content);
-      setVoiceNotes(notes);
+      if (!VOICE_NOTES_DIR.exists) {
+        VOICE_NOTES_DIR.create({ intermediates: true, idempotent: true });
+      }
+      if (VOICE_NOTES_LIST_FILE.exists) {
+        const content = await VOICE_NOTES_LIST_FILE.text();
+        const notes = JSON.parse(content);
+        setVoiceNotes(notes);
+      }
     } catch (error) {
       console.error('Error loading voice notes:', error);
     }
@@ -85,7 +89,8 @@ export default function VoiceNotesScreen() {
 
   const saveVoiceNotesList = async (notes: VoiceNote[]) => {
     try {
-      await writeAsStringAsync(VOICE_NOTES_LIST_FILE, JSON.stringify(notes, null, 2));
+      VOICE_NOTES_LIST_FILE.create({ intermediates: true, overwrite: true });
+      VOICE_NOTES_LIST_FILE.write(JSON.stringify(notes, null, 2));
     } catch (error) {
       console.error('Error saving voice notes list:', error);
     }
@@ -186,12 +191,15 @@ export default function VoiceNotesScreen() {
     if (!pendingRecordingUri || !newTitle.trim()) return;
 
     try {
-      await makeDirectoryAsync(VOICE_NOTES_DIR, { intermediates: true });
+      if (!VOICE_NOTES_DIR.exists) {
+        VOICE_NOTES_DIR.create({ intermediates: true, idempotent: true });
+      }
 
       const fileName = `${Date.now()}.m4a`;
-      const newFileUri = `${VOICE_NOTES_DIR}${fileName}`;
-
-      await copyAsync({ from: pendingRecordingUri, to: newFileUri });
+      const newFile = new File(VOICE_NOTES_DIR, fileName);
+      newFile.create({ intermediates: true, overwrite: true });
+      new File(pendingRecordingUri).copy(newFile);
+      const newFileUri = newFile.uri;
 
       const { sound: audioSound } = await Audio.Sound.createAsync({ uri: pendingRecordingUri });
       const status = await audioSound.getStatusAsync();

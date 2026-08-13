@@ -1,5 +1,5 @@
 // app/activitiesStore.ts
-import { documentDirectory, getInfoAsync, readAsStringAsync, writeAsStringAsync } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 
 export interface Activity {
   id: string;
@@ -135,13 +135,12 @@ let globalHistoryLogs: HistoryLog[] = [];
 type Listener = () => void;
 const listeners: Listener[] = [];
 
-const STORAGE_FILE = documentDirectory + 'shimer_data.json';
+const STORAGE_FILE = new File(Paths.document, 'shimer_data.json');
 
 async function loadFromFile() {
   try {
-    const fileInfo = await getInfoAsync(STORAGE_FILE);
-    if (fileInfo.exists) {
-      const content = await readAsStringAsync(STORAGE_FILE);
+    if (STORAGE_FILE.exists) {
+      const content = await STORAGE_FILE.text();
       const data = JSON.parse(content);
       if (data.activities) globalActivities = data.activities;
       if (data.checklists) globalChecklists = data.checklists;
@@ -186,7 +185,8 @@ async function saveToFile() {
       suspendedGoal: globalSuspendedGoal,
       suspendedActivities: globalSuspendedActivities,
     };
-    await writeAsStringAsync(STORAGE_FILE, JSON.stringify(data, null, 2));
+    STORAGE_FILE.create({ intermediates: true, overwrite: true });
+    STORAGE_FILE.write(JSON.stringify(data, null, 2));
   } catch (error) {
     console.warn('Failed to save data to file', error);
   }

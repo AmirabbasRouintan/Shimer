@@ -16,8 +16,7 @@ import {
 } from "react-native";
 import WebView from "react-native-webview";
 import { shadcn } from "../../constants/components-theme";
-
-const store: Record<string, any> = {};
+import { store } from "../miscStore";
 
 const editorHtml = `
 <!DOCTYPE html>

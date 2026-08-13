@@ -8,9 +8,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import CustomAlert from "../components/CustomAlert";
+import { store } from "../miscStore";
 
 const { width: screenWidth } = Dimensions.get('window');
-const store: Record<string, any> = {};
 
 const GOAL_HEIGHT = 28;
 const GAP = 8;
