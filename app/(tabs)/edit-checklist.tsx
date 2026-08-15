@@ -36,6 +36,7 @@ export default function EditChecklistScreen() {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
+  const draftsRef = useRef<Record<number, string>>({});
 
   useEffect(() => {
     const checklists = getChecklists();
@@ -77,11 +78,28 @@ export default function EditChecklistScreen() {
     }, 100);
   };
 
-  const updateItem = (text: string, index: number) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], text };
+  const commitItem = (index: number): ChecklistItem[] => {
+    const draft = draftsRef.current[index];
+    if (draft === undefined) return items;
+    const newItems = items.map((it, i) =>
+      i === index ? { ...it, text: draft } : it
+    );
     setItems(newItems);
     saveChecklist(newItems);
+    return newItems;
+  };
+
+  const commitAll = (): ChecklistItem[] => {
+    const drafts = draftsRef.current;
+    const hasDrafts = Object.keys(drafts).length > 0;
+    const newItems = items.map((it, i) =>
+      drafts[i] !== undefined ? { ...it, text: drafts[i] } : it
+    );
+    if (hasDrafts) {
+      setItems(newItems);
+      saveChecklist(newItems);
+    }
+    return newItems;
   };
 
   const removeItem = (index: number) => {
@@ -89,6 +107,7 @@ export default function EditChecklistScreen() {
     setItems(newItems);
     saveChecklist(newItems);
     inputRefs.current = inputRefs.current.filter((_, i) => i !== index);
+    draftsRef.current = {};
   };
 
   const toggleItem = (index: number) => {
@@ -104,6 +123,7 @@ export default function EditChecklistScreen() {
     newItems.splice(toIndex, 0, movedItem);
     setItems(newItems);
     saveChecklist(newItems);
+    draftsRef.current = {};
   };
 
   const handleDeleteChecklist = () => {
@@ -125,28 +145,40 @@ export default function EditChecklistScreen() {
   };
 
   const handleBlur = (index: number) => {
-    if (items[index]?.text.trim() === "" && items.length > 1) {
-      removeItem(index);
+    const committed = commitItem(index);
+    if (committed[index]?.text.trim() === "" && committed.length > 1) {
+      const next = committed.filter((_, i) => i !== index);
+      setItems(next);
+      saveChecklist(next);
+      inputRefs.current = inputRefs.current.filter((_, i) => i !== index);
+      draftsRef.current = {};
     }
   };
 
   const handleSubmitEditing = (index: number) => {
-    if (items[index]?.text.trim() !== "") {
-      addItem();
-    }
+    const draft = draftsRef.current[index];
+    const text = (draft ?? items[index]?.text ?? "").trim();
+    if (text === "") return;
+    const committed = items.map((it, i) =>
+      i === index && draft !== undefined ? { ...it, text: draft } : it
+    );
+    const newItems = [...committed, { text: "", completed: false }];
+    setItems(newItems);
+    saveChecklist(newItems);
+    draftsRef.current = {};
+    setTimeout(() => {
+      inputRefs.current[newItems.length - 1]?.focus();
+    }, 100);
   };
 
-  const cleanupEmptyItems = () => {
-    const nonEmptyItems = items.filter(item => item.text.trim() !== "");
-    if (nonEmptyItems.length !== items.length) {
+  const handleSave = () => {
+    const committed = commitAll();
+    const nonEmptyItems = committed.filter(item => item.text.trim() !== "");
+    if (nonEmptyItems.length !== committed.length) {
       setItems(nonEmptyItems);
       inputRefs.current = inputRefs.current.slice(0, nonEmptyItems.length);
       saveChecklist(nonEmptyItems);
     }
-  };
-
-  const handleSave = () => {
-    cleanupEmptyItems();
     router.back();
   };
 
@@ -175,8 +207,10 @@ export default function EditChecklistScreen() {
               if (ref) inputRefs.current[index] = ref;
             }}
             style={[styles.itemInput, item.completed && styles.itemDone]}
-            value={item.text}
-            onChangeText={(text) => updateItem(text, index)}
+            defaultValue={item.text}
+            onChangeText={(text) => {
+              draftsRef.current[index] = text;
+            }}
             onBlur={() => handleBlur(index)}
             onSubmitEditing={() => handleSubmitEditing(index)}
             placeholder={`Item ${index + 1}`}

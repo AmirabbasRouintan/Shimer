@@ -2,11 +2,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert, Animated
+  Modal, TextInput, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/Header';
+import {
+  AudioModule,
+  setAudioModeAsync,
+  requestRecordingPermissionsAsync,
+} from 'expo-audio';
+import type { RecorderState, RecordingOptions } from 'expo-audio';
 import { Audio } from 'expo-av';
 import { File, Directory, Paths } from 'expo-file-system';
 import CustomAlert from '../components/CustomAlert';
@@ -26,7 +32,8 @@ export default function VoiceNotesScreen() {
   const router = useRouter();
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recorder, setRecorder] = useState<AudioModule.AudioRecorder | null>(null);
+  const [recorderState, setRecorderState] = useState<RecorderState | null>(null);
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [pendingRecordingUri, setPendingRecordingUri] = useState<string | null>(null);
@@ -34,40 +41,31 @@ export default function VoiceNotesScreen() {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [generatedName, setGeneratedName] = useState('');
   const [showSaveSuccessAlert, setShowSaveSuccessAlert] = useState(false);
+  const [barHeights, setBarHeights] = useState<number[]>(Array(12).fill(4));
 
-  // Animation values for visualizer
-  const barHeights = useRef([
-    new Animated.Value(5),
-    new Animated.Value(5),
-    new Animated.Value(5),
-    new Animated.Value(5),
-    new Animated.Value(5),
-    new Animated.Value(5)
-  ]).current;
-
-  const meterInterval = useRef<NodeJS.Timeout | null>(null);
+  const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     setupAudioMode();
     loadVoiceNotes();
     return () => {
+      if (meteringIntervalRef.current) {
+        clearInterval(meteringIntervalRef.current);
+      }
       if (sound) {
         sound.unloadAsync();
-      }
-      if (meterInterval.current) {
-        clearInterval(meterInterval.current);
       }
     };
   }, []);
 
   const setupAudioMode = async () => {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        interruptionModeAndroid: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
     } catch (error) {
       console.error('Error setting audio mode:', error);
@@ -110,54 +108,88 @@ export default function VoiceNotesScreen() {
     return `Voice ${month} ${day}, ${hour12}:${minuteStr} ${ampm}`;
   };
 
-  const startVisualizer = () => {
-    const animate = () => {
-      if (!isRecording) return;
+  const barHeightsRef = useRef<number[]>(Array(12).fill(4));
+  const targetHeightsRef = useRef<number[]>(Array(12).fill(4));
 
-      const animations = barHeights.map(bar =>
-        Animated.timing(bar, {
-          toValue: Math.random() * 35 + 8,
-          duration: 100,
-          useNativeDriver: false,
-        })
-      );
+  /**
+   * Start polling metering values from the recorder.
+   * The metering value is in dB (typically -100 to 0), where higher = louder.
+   */
+  const startMetering = (rec: AudioModule.AudioRecorder) => {
+    if (meteringIntervalRef.current) return;
 
-      Animated.parallel(animations).start(() => {
-        if (isRecording) {
-          const resetAnimations = barHeights.map(bar =>
-            Animated.timing(bar, {
-              toValue: Math.random() * 35 + 8,
-              duration: 100,
-              useNativeDriver: false,
-            })
-          );
-          Animated.parallel(resetAnimations).start(() => {
-            if (isRecording) animate();
-          });
-        }
+    meteringIntervalRef.current = setInterval(() => {
+      const state = rec.getStatus();
+
+      // Smooth interpolation towards target heights
+      barHeightsRef.current = barHeightsRef.current.map((current, i) => {
+        const target = targetHeightsRef.current[i];
+        // Lerp factor 0.15 for smooth transitions
+        return current + (target - current) * 0.15;
       });
-    };
+      setBarHeights([...barHeightsRef.current]);
 
-    animate();
+      if (state.metering != null && state.metering > -100) {
+        // Map dB to normalized 0-1, but clamp range for softer response
+        // -80 to -10 dB range gives more natural feel
+        const clampedDb = Math.max(-80, Math.min(-10, state.metering));
+        const normalized = (clampedDb + 80) / 70; // 0 to 1
+
+        // Calculate target heights with lower max (22 instead of 38)
+        targetHeightsRef.current = targetHeightsRef.current.map((_, i) => {
+          const wave = Math.sin(Date.now() / 300 + i * 0.6) * 1.5 * normalized;
+          return Math.max(4, normalized * 22 + wave);
+        });
+      } else {
+        // No metering data yet — use subtle idle animation
+        targetHeightsRef.current = targetHeightsRef.current.map((_, i) => {
+          const wave = Math.sin(Date.now() / 400 + i * 0.7) * 2;
+          return Math.max(4, 8 + wave);
+        });
+      }
+      setRecorderState(state);
+    }, 50);
+  };
+
+  const stopMetering = () => {
+    if (meteringIntervalRef.current) {
+      clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = null;
+    }
   };
 
   const startRecording = async () => {
     try {
-      await setupAudioMode();
-
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
+      const perm = await requestRecordingPermissionsAsync();
+      if (perm.status !== 'granted') {
         Alert.alert('Permission Required', 'Please grant microphone permission to record voice notes.');
         return;
       }
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      await setupAudioMode();
 
-      setRecording(recording);
+      const options: RecordingOptions = {
+        isMeteringEnabled: true,
+        extension: '.m4a',
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        bitRate: 128000,
+        ios: {
+          audioQuality: 96,
+        },
+        android: {
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
+        },
+      };
+
+      const rec = new AudioModule.AudioRecorder(options);
+      setRecorder(rec);
+
+      await rec.prepareToRecordAsync(options);
+      rec.record();
       setIsRecording(true);
-      startVisualizer();
+      startMetering(rec);
     } catch (error) {
       console.error('Failed to start recording:', error);
       Alert.alert('Error', 'Failed to start recording.');
@@ -165,22 +197,24 @@ export default function VoiceNotesScreen() {
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!recorder) return;
 
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await recorder.stop();
+      const state = recorder.getStatus();
+      setRecorder(null);
       setIsRecording(false);
+      stopMetering();
 
       // Reset visualizer bars
-      barHeights.forEach(bar => bar.setValue(5));
+      setBarHeights(Array(12).fill(4));
+      setRecorderState(null);
 
-      if (uri) {
+      if (state.url) {
         const autoName = generateAutoName();
         setGeneratedName(autoName);
         setNewTitle(autoName);
-        setPendingRecordingUri(uri);
+        setPendingRecordingUri(state.url);
         setShowTitleModal(true);
       }
     } catch (error) {
@@ -205,10 +239,7 @@ export default function VoiceNotesScreen() {
       new File(pendingRecordingUri).copy(newFile);
       const newFileUri = newFile.uri;
 
-      const { sound: audioSound } = await Audio.Sound.createAsync({ uri: pendingRecordingUri });
-      const status = await audioSound.getStatusAsync();
-      const duration = status.isLoaded ? (status.durationMillis || 0) : 0;
-      await audioSound.unloadAsync();
+      const duration = recorderState?.durationMillis || 0;
 
       const newNote: VoiceNote = {
         id: Date.now().toString(),
@@ -372,12 +403,13 @@ export default function VoiceNotesScreen() {
       <View style={styles.recordingSection}>
         {isRecording && (
           <View style={styles.visualizerContainer}>
-            {barHeights.map((height, index) => (
-              <Animated.View
-                key={index}
+            {barHeights.map((h, i) => (
+              <View
+                key={i}
                 style={[
                   styles.visualizerBar,
-                  { height }
+                  { height: Math.max(4, h) },
+                  getBarGradientColor(h, i)
                 ]}
               />
             ))}
@@ -461,6 +493,14 @@ export default function VoiceNotesScreen() {
       />
     </View>
   );
+}
+
+/** Color helper: quiet bars are blue, medium are teal, louder shift to pink */
+function getBarGradientColor(height: number, _index: number) {
+  const ratio = Math.min(1, height / 22);
+  if (ratio < 0.4) return { backgroundColor: '#5B9BD5' }; // Soft blue
+  if (ratio < 0.7) return { backgroundColor: '#6EC4A8' }; // Teal
+  return { backgroundColor: '#E8846B' }; // Soft coral/pink
 }
 
 const styles = StyleSheet.create({
@@ -550,15 +590,16 @@ const styles = StyleSheet.create({
   visualizerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
+    alignItems: 'flex-end',
+    gap: 4,
     marginBottom: 16,
-    height: 45,
+    height: 44,
   },
   visualizerBar: {
-    width: 4,
-    borderRadius: 2,
-    backgroundColor: '#fff',
+    width: 6,
+    borderRadius: 3,
+    backgroundColor: '#4A90D9',
+    minHeight: 4,
   },
   recordButton: {
     alignItems: 'center',
