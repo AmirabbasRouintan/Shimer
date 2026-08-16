@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getDailyPlan, setDailyPlan } from '../activitiesStore';
 import { Header } from '@/components/Header';
+import CustomAlert from '../components/CustomAlert';
 
 // Swipeable Row Component
 const SwipeablePlanRow = ({ item, onDelete, onPress }: any) => {
@@ -131,6 +132,8 @@ const formatDisplayDate = (dateKey: string): string => {
 export default function PlannedDatesScreen() {
   const router = useRouter();
   const [plannedDates, setPlannedDates] = useState<{ date: string; plan: any }[]>([]);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [dateToDelete, setDateToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     loadPlannedDates();
@@ -149,23 +152,18 @@ export default function PlannedDatesScreen() {
   };
 
   const handleDeletePlan = (dateKey: string) => {
-    Alert.alert(
-      'Delete Plan',
-      `Delete plan for ${formatDisplayDate(dateKey)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const allPlans = getDailyPlan() || {};
-            delete allPlans[dateKey];
-            setDailyPlan(allPlans);
-            loadPlannedDates();
-          }
-        }
-      ]
-    );
+    setDateToDelete(dateKey);
+    setShowDeleteAlert(true);
+  };
+
+  const confirmDeletePlan = () => {
+    if (!dateToDelete) return;
+    const allPlans = getDailyPlan() || {};
+    delete allPlans[dateToDelete];
+    setDailyPlan(allPlans);
+    loadPlannedDates();
+    setShowDeleteAlert(false);
+    setDateToDelete(null);
   };
 
   const handleOpenPlan = (dateKey: string) => {
@@ -212,6 +210,20 @@ export default function PlannedDatesScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      {/* Delete Confirmation Alert - Apple Style */}
+      <CustomAlert
+        visible={showDeleteAlert}
+        title="Delete Plan"
+        message={`Delete plan for ${dateToDelete ? formatDisplayDate(dateToDelete) : ''}?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeletePlan}
+        onCancel={() => {
+          setShowDeleteAlert(false);
+          setDateToDelete(null);
+        }}
+      />
     </View>
   );
 }

@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert
+  Modal, TextInput, Alert, Animated, PanResponder
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
 import { Header } from '@/components/Header';
 import {
@@ -28,6 +29,60 @@ interface VoiceNote {
 const VOICE_NOTES_DIR = new Directory(Paths.document, 'voice_notes');
 const VOICE_NOTES_LIST_FILE = new File(VOICE_NOTES_DIR, 'notes.json');
 
+function SwipeableNoteRow({ onEdit, onDelete, children }: any) {
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 15 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderMove: (_, g) => {
+        translateX.setValue(Math.max(-50, Math.min(50, g.dx)));
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -35) {
+          Animated.spring(translateX, { toValue: -50, useNativeDriver: true }).start();
+          setTimeout(() => {
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+            onDelete();
+          }, 150);
+        } else if (g.dx > 35) {
+          Animated.spring(translateX, { toValue: 50, useNativeDriver: true }).start();
+          setTimeout(() => {
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+            onEdit();
+          }, 150);
+        } else {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={styles.swipeContainer}>
+      {/* Background revealed behind the row */}
+      <View style={styles.swipeDeleteBg}>
+        <Ionicons name="trash-outline" size={20} color="#fff" />
+        <Text style={styles.swipeBgText}>Delete</Text>
+      </View>
+      <View style={styles.swipeEditBg}>
+        <Ionicons name="create-outline" size={20} color="#fff" />
+        <Text style={styles.swipeBgText}>Edit</Text>
+      </View>
+      <Animated.View
+        style={[
+          styles.swipeRowContent,
+          { transform: [{ translateX }] }
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function VoiceNotesScreen() {
   const router = useRouter();
   const [voiceNotes, setVoiceNotes] = useState<VoiceNote[]>([]);
@@ -42,6 +97,15 @@ export default function VoiceNotesScreen() {
   const [generatedName, setGeneratedName] = useState('');
   const [showSaveSuccessAlert, setShowSaveSuccessAlert] = useState(false);
   const [barHeights, setBarHeights] = useState<number[]>(Array(12).fill(4));
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editNoteId, setEditNoteId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [playbackDuration, setPlaybackDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [dragPosition, setDragPosition] = useState<number | null>(null);
 
   const meteringIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -271,6 +335,9 @@ export default function VoiceNotesScreen() {
         await sound.unloadAsync();
         setSound(null);
         setPlayingNoteId(null);
+        setPlaybackPosition(0);
+        setPlaybackDuration(0);
+        setIsPlaying(false);
       }
 
       if (playingNoteId === note.id) {
@@ -279,57 +346,126 @@ export default function VoiceNotesScreen() {
 
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: note.uri },
-        { shouldPlay: true }
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
       );
 
       setSound(newSound);
       setPlayingNoteId(note.id);
-
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setPlayingNoteId(null);
-          newSound.unloadAsync();
-          setSound(null);
-        }
-      });
+      setIsPlaying(true);
     } catch (error) {
       console.error('Error playing voice note:', error);
       Alert.alert('Error', 'Failed to play voice note.');
     }
   };
 
-  const deleteVoiceNote = async (noteId: string) => {
-    Alert.alert(
-      'Delete Voice Note',
-      'Are you sure you want to delete this voice note?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const note = voiceNotes.find(n => n.id === noteId);
-            if (note) {
-              try {
-                const updatedNotes = voiceNotes.filter(n => n.id !== noteId);
-                setVoiceNotes(updatedNotes);
-                await saveVoiceNotesList(updatedNotes);
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (status.isLoaded) {
+      setPlaybackPosition(status.positionMillis);
+      setPlaybackDuration(status.durationMillis || 0);
+      setIsPlaying(status.isPlaying);
 
-                if (playingNoteId === noteId) {
-                  if (sound) {
-                    await sound.unloadAsync();
-                    setSound(null);
-                  }
-                  setPlayingNoteId(null);
-                }
-              } catch (error) {
-                console.error('Error deleting voice note:', error);
-              }
-            }
+      if (status.didJustFinish) {
+        setPlayingNoteId(null);
+        setPlaybackPosition(0);
+        setIsPlaying(false);
+        sound?.unloadAsync();
+        setSound(null);
+      }
+    }
+  };
+
+  const handleSeek = async (position: number) => {
+    if (sound) {
+      await sound.setPositionAsync(position);
+      setPlaybackPosition(position);
+      setDragPosition(null);
+    }
+  };
+
+  const handleSlidingStart = (value: number) => {
+    setDragPosition(value);
+  };
+
+  const handleValueChange = (value: number) => {
+    setDragPosition(value);
+  };
+
+  const handleSlidingComplete = async (value: number) => {
+    await handleSeek(value);
+  };
+
+  const togglePlayPause = async () => {
+    if (sound) {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+      }
+    }
+  };
+
+  const seekForward = async () => {
+    if (sound && playbackDuration > 0) {
+      const newPosition = Math.min(playbackPosition + 10000, playbackDuration);
+      await handleSeek(newPosition);
+    }
+  };
+
+  const seekBackward = async () => {
+    if (sound) {
+      const newPosition = Math.max(playbackPosition - 10000, 0);
+      await handleSeek(newPosition);
+    }
+  };
+
+  const deleteVoiceNote = (noteId: string) => {
+    setNoteToDelete(noteId);
+    setShowDeleteAlert(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!noteToDelete) return;
+    const note = voiceNotes.find(n => n.id === noteToDelete);
+    if (note) {
+      try {
+        const updatedNotes = voiceNotes.filter(n => n.id !== noteToDelete);
+        setVoiceNotes(updatedNotes);
+        await saveVoiceNotesList(updatedNotes);
+
+        if (playingNoteId === noteToDelete) {
+          if (sound) {
+            await sound.unloadAsync();
+            setSound(null);
           }
+          setPlayingNoteId(null);
         }
-      ]
+      } catch (error) {
+        console.error('Error deleting voice note:', error);
+      }
+    }
+    setShowDeleteAlert(false);
+    setNoteToDelete(null);
+  };
+
+  const openEditNote = (note: VoiceNote) => {
+    setEditNoteId(note.id);
+    setEditTitle(note.title);
+    setShowEditModal(true);
+  };
+
+  const confirmEdit = async () => {
+    if (!editNoteId || !editTitle.trim()) return;
+    const updatedNotes = voiceNotes.map(n =>
+      n.id === editNoteId ? { ...n, title: editTitle.trim() } : n
     );
+    setVoiceNotes(updatedNotes);
+    await saveVoiceNotesList(updatedNotes);
+    setShowEditModal(false);
+    setEditNoteId(null);
+    setEditTitle('');
   };
 
   const formatDuration = (milliseconds: number): string => {
@@ -366,37 +502,86 @@ export default function VoiceNotesScreen() {
           </View>
         ) : (
           voiceNotes.map((note) => (
-            <View key={note.id} style={styles.noteItem}>
-              <TouchableOpacity
-                style={styles.noteContent}
-                onPress={() => playVoiceNote(note)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.noteLeft}>
-                  <Ionicons
-                    name={playingNoteId === note.id ? "pause-circle" : "play-circle"}
-                    size={40}
-                    color={playingNoteId === note.id ? "#fff" : "#888"}
-                  />
-                  <View style={styles.noteInfo}>
-                    <Text style={styles.noteTitle} numberOfLines={1}>{note.title}</Text>
-                    <View style={styles.noteMeta}>
-                      <Text style={styles.noteDuration}>{formatDuration(note.duration)}</Text>
-                      <Text style={styles.noteDate}>{formatDate(note.createdAt)}</Text>
+            <SwipeableNoteRow
+              key={note.id}
+              onEdit={() => openEditNote(note)}
+              onDelete={() => deleteVoiceNote(note.id)}
+            >
+              <View style={[styles.noteItem, playingNoteId === note.id && styles.noteItemActive]}>
+                <TouchableOpacity
+                  style={styles.noteContent}
+                  onPress={() => playVoiceNote(note)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.noteLeft}>
+                    <TouchableOpacity onPress={playingNoteId === note.id ? togglePlayPause : () => playVoiceNote(note)}>
+                      <Ionicons
+                        name={playingNoteId === note.id && isPlaying ? "pause-circle" : "play-circle"}
+                        size={40}
+                        color={playingNoteId === note.id ? "#fff" : "#888"}
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.noteInfo}>
+                      <Text style={styles.noteTitle} numberOfLines={1}>{note.title}</Text>
+                      <View style={styles.noteMeta}>
+                        <Text style={styles.noteDuration}>{formatDuration(note.duration)}</Text>
+                        <Text style={styles.noteDate}>{formatDate(note.createdAt)}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => deleteVoiceNote(note.id)}
-              >
-                <Ionicons name="trash-outline" size={22} color="#FF6B6B" />
-              </TouchableOpacity>
-            </View>
+                </TouchableOpacity>
+
+                {/* Playback Controls - Show when this note is playing */}
+                {playingNoteId === note.id && (
+                  <View style={styles.playbackControls}>
+                    {/* Progress Bar */}
+                    <View style={styles.progressContainer}>
+                      <Text style={styles.timeText}>{formatDuration(dragPosition ?? playbackPosition)}</Text>
+                      <Slider
+                        style={styles.slider}
+                        minimumValue={0}
+                        maximumValue={playbackDuration > 0 ? playbackDuration : 1}
+                        step={1000}
+                        value={dragPosition ?? playbackPosition}
+                        minimumTrackTintColor="#fff"
+                        maximumTrackTintColor="#3a3a3a"
+                        thumbTintColor="#fff"
+                        tapToSeek
+                        disabled={playbackDuration <= 0}
+                        onSlidingStart={handleSlidingStart}
+                        onValueChange={handleValueChange}
+                        onSlidingComplete={handleSlidingComplete}
+                      />
+                      <Text style={styles.timeText}>{formatDuration(playbackDuration)}</Text>
+                    </View>
+
+                    {/* Seek Controls */}
+                    <View style={styles.seekControls}>
+                      <TouchableOpacity onPress={seekBackward} style={styles.seekButton}>
+                        <Ionicons name="play-back" size={20} color="#000" />
+                        <Text style={styles.seekText}>10s</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={togglePlayPause} style={styles.playPauseButton}>
+                        <Ionicons
+                          name={isPlaying ? "pause" : "play"}
+                          size={28}
+                          color="#000"
+                        />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={seekForward} style={styles.seekButton}>
+                        <Ionicons name="play-forward" size={20} color="#000" />
+                        <Text style={styles.seekText}>10s</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </SwipeableNoteRow>
           ))
         )}
-        <View style={{ height: 100 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
 
       {/* Recording Section - Bottom */}
@@ -491,6 +676,63 @@ export default function VoiceNotesScreen() {
         singleButton
         onConfirm={() => setShowSaveSuccessAlert(false)}
       />
+
+      {/* Edit Title Modal - Apple Style */}
+      <Modal visible={showEditModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Rename Voice Note</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                <Ionicons name="close" size={24} color="#888" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.titleInput}
+              placeholder="Enter a new title"
+              placeholderTextColor="#555"
+              value={editTitle}
+              onChangeText={setEditTitle}
+              autoFocus
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowEditModal(false);
+                  setEditNoteId(null);
+                  setEditTitle('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, !editTitle.trim() && styles.saveButtonDisabled]}
+                onPress={confirmEdit}
+                disabled={!editTitle.trim()}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Alert - Apple Style */}
+      <CustomAlert
+        visible={showDeleteAlert}
+        title="Delete Voice Note"
+        message="Are you sure you want to delete this voice note?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDelete}
+        onCancel={() => {
+          setShowDeleteAlert(false);
+          setNoteToDelete(null);
+        }}
+      />
     </View>
   );
 }
@@ -532,16 +774,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   noteItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#0a0a0a',
     borderRadius: 12,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#1a1a1a',
+    overflow: 'hidden',
+  },
+  noteItemActive: {
+    borderColor: '#fff',
+  },
+  swipeContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  swipeDeleteBg: {
+    position: 'absolute',
+    right: 0,
+    marginRight: 2,
+    top: 0,
+    bottom: 0,
+    width: 50,
+    backgroundColor: '#FF453A',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.9,
+  },
+  swipeEditBg: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 50,
+    backgroundColor: '#0A84FF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.9,
+  },
+  swipeRowContent: {
+    backgroundColor: '#0a0a0a',
+    borderRadius: 12,
+  },
+  swipeBgText: {
+    color: '#fff',
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '600',
   },
   noteContent: {
-    flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 12,
   },
@@ -572,14 +853,56 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 11,
   },
-  deleteButton: {
-    padding: 16,
+  playbackControls: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  timeText: {
+    color: '#fff',
+    fontSize: 11,
+    width: 40,
+  },
+  slider: {
+    flex: 1,
+    height: 24,
+  },
+  seekControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 24,
+  },
+  seekButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+  },
+  seekText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  playPauseButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   recordingSection: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     alignItems: 'center',
     paddingVertical: 20,
     paddingBottom: 30,

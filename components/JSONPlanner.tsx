@@ -6,7 +6,6 @@ import {
   ScrollView, Platform, Alert, Modal, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, G, Text as SvgText } from 'react-native-svg';
 
 // ---------- Helper Functions ----------
 const parseTimeToMinutes = (timeStr: string): number => {
@@ -237,7 +236,6 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
   const [checklistItems, setChecklistItems] = useState<{ text: string, completed: boolean }[]>([]);
   const [showHelpModal, setShowHelpModal] = useState(false);
-  const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<DailyPlan | null>(null);
 
@@ -704,10 +702,6 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
               <Text style={styles.helpText}>Tap the location button in the header to instantly scroll to your current schedule block.</Text>
             </View>
             <View style={styles.helpSection}>
-              <Text style={styles.helpSectionTitle}>📊 View Progress</Text>
-              <Text style={styles.helpText}>Tap the chart button to see daily progress in a donut chart.</Text>
-            </View>
-            <View style={styles.helpSection}>
               <Text style={styles.helpSectionTitle}>✏️ Edit Plan</Text>
               <Text style={styles.helpText}>Tap the edit button to modify name, motto, schedule, checklist, and notes.</Text>
             </View>
@@ -726,56 +720,6 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
     </Modal>
   );
 
-  // Render Summary Modal (Donut Chart)
-  const renderSummaryModal = () => {
-    const statsLocal = getCompletionStats();
-    const size = 200;
-    const strokeWidth = 20;
-    const radius = (size - strokeWidth) / 2;
-    const circumference = 2 * Math.PI * radius;
-    const progressOffset = circumference - (statsLocal.percentage / 100) * circumference;
-
-    return (
-      <Modal visible={showSummaryModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.summaryModalContent}>
-            <View style={styles.summaryModalHeader}>
-              <Text style={styles.summaryModalTitle}>📊 Day Progress</Text>
-              <TouchableOpacity onPress={() => setShowSummaryModal(false)}>
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.summaryScroll}>
-              <View style={styles.donutContainer}>
-                <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                  <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#1a1a1a" strokeWidth={strokeWidth} fill="none" />
-                  <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#fff" strokeWidth={strokeWidth} fill="none"
-                    strokeDasharray={circumference} strokeDashoffset={progressOffset} strokeLinecap="round"
-                    transform={`rotate(-90, ${size / 2}, ${size / 2})`} />
-                  <G>
-                    <SvgText x={size / 2} y={size / 2 - 10} textAnchor="middle" fill="#fff" fontSize={32} fontWeight="bold">
-                      {Math.round(statsLocal.percentage)}%
-                    </SvgText>
-                    <SvgText x={size / 2} y={size / 2 + 15} textAnchor="middle" fill="#888" fontSize={12}>Complete</SvgText>
-                  </G>
-                </Svg>
-              </View>
-              <View style={styles.statsGrid}>
-                <View style={styles.statCard}><Ionicons name="checkbox-outline" size={24} color="#fff" /><Text style={styles.statNumber}>{statsLocal.completed}/{statsLocal.total}</Text><Text style={styles.statLabel}>Total Tasks</Text></View>
-                <View style={styles.statCard}><Ionicons name="time-outline" size={24} color="#FF9F4A" /><Text style={styles.statNumber}>{statsLocal.scheduleCompleted}/{statsLocal.scheduleTotal}</Text><Text style={styles.statLabel}>Schedule</Text></View>
-                <View style={styles.statCard}><Ionicons name="list-outline" size={24} color="#DDA0DD" /><Text style={styles.statNumber}>{statsLocal.checklistCompleted}/{statsLocal.checklistTotal}</Text><Text style={styles.statLabel}>Checklist</Text></View>
-              </View>
-              {statsLocal.percentage === 100 && <View style={styles.achievementBox}><Ionicons name="trophy" size={32} color="#FFD700" /><Text style={styles.achievementText}>Perfect Day! 🎉</Text><Text style={styles.achievementSubtext}>You completed everything!</Text></View>}
-              {statsLocal.percentage >= 70 && statsLocal.percentage < 100 && <View style={styles.greatBox}><Ionicons name="star" size={28} color="#FFEAA7" /><Text style={styles.greatText}>Great Progress! 🌟</Text><Text style={styles.greatSubtext}>You're doing awesome today!</Text></View>}
-              {statsLocal.percentage < 30 && statsLocal.total > 0 && <View style={styles.encourageBox}><Ionicons name="rocket" size={28} color="#fff" /><Text style={styles.encourageText}>You've got this! 💪</Text><Text style={styles.encourageSubtext}>Start checking off your tasks</Text></View>}
-              <TouchableOpacity style={styles.closeSummaryButton} onPress={() => setShowSummaryModal(false)}><Text style={styles.closeSummaryText}>Continue Your Day</Text></TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
   // Render Daily Plan View
   const renderDailyPlanView = () => {
     if (!dailyPlan) return null;
@@ -792,7 +736,6 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
           <Text style={styles.currentTimeText}>{timeString}</Text>
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={scrollToCurrentBlock}><Ionicons name="locate" size={20} color="#fff" /></TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSummaryModal(true)}><Ionicons name="stats-chart" size={20} color="#fff" /></TouchableOpacity>
             <TouchableOpacity onPress={() => setIsEditing(true)}><Ionicons name="create-outline" size={20} color="#fff" /></TouchableOpacity>
           </View>
         </View>
@@ -893,7 +836,6 @@ export default function JSONPlanner({ selectedDate, initialPlan, onSave, onClose
     <ScrollView ref={scrollViewRef} style={styles.scrollView} keyboardShouldPersistTaps="handled">
       {isEditing && dailyPlan ? renderEditMode() : (dailyPlan ? renderDailyPlanView() : renderJSONInputView())}
       {renderHelpModal()}
-      {renderSummaryModal()}
 
       {/* Apple-style Alerts */}
       <AppleAlert
@@ -986,26 +928,6 @@ const styles = StyleSheet.create({
   promptText: { color: '#fff', fontSize: 13, lineHeight: 18, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   closeHelpButton: { backgroundColor: '#fff', margin: 20, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
   closeHelpText: { color: '#000', fontSize: 16, fontWeight: '700' },
-  summaryModalContent: { backgroundColor: '#0a0a0a', borderRadius: 20, width: '90%', maxHeight: '85%', borderWidth: 1, borderColor: '#1a1a1a' },
-  summaryModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' },
-  summaryModalTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  summaryScroll: { padding: 20 },
-  donutContainer: { alignItems: 'center', justifyContent: 'center', marginVertical: 20 },
-  statsGrid: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 20, marginBottom: 20 },
-  statCard: { flex: 1, backgroundColor: '#1a1a1a', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8 },
-  statNumber: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  statLabel: { color: '#888', fontSize: 12 },
-  achievementBox: { backgroundColor: '#1a2a1a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#FFD700', marginVertical: 10 },
-  achievementText: { color: '#FFD700', fontSize: 18, fontWeight: 'bold' },
-  achievementSubtext: { color: '#aaa', fontSize: 12 },
-  greatBox: { backgroundColor: '#1a2a1a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#FFEAA7', marginVertical: 10 },
-  greatText: { color: '#FFEAA7', fontSize: 18, fontWeight: 'bold' },
-  greatSubtext: { color: '#aaa', fontSize: 12 },
-  encourageBox: { backgroundColor: '#1a1a2a', padding: 20, borderRadius: 12, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#fff', marginVertical: 10 },
-  encourageText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  encourageSubtext: { color: '#aaa', fontSize: 12 },
-  closeSummaryButton: { backgroundColor: '#fff', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 20 },
-  closeSummaryText: { color: '#000', fontSize: 16, fontWeight: '700' },
   // Daily Plan Styles
   planContainer: { paddingVertical: 16, paddingBottom: 80 },
   liveTimeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#0a0a0a', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#1a1a1a' },

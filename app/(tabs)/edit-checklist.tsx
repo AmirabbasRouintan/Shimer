@@ -16,6 +16,7 @@ import { Header } from '@/components/Header';
 import DragList from 'react-native-draglist';
 import { getChecklists, updateChecklist, deleteChecklist, Checklist, ChecklistItem } from '../activitiesStore';
 import { shadcn } from '@/constants/components-theme';
+import CustomAlert from '../components/CustomAlert';
 
 const iconList = [
   "school-outline", "book-outline", "film-outline", "leaf-outline",
@@ -35,6 +36,7 @@ export default function EditChecklistScreen() {
   const [checklist, setChecklist] = useState<Checklist>({ title: '', icon: 'school-outline', items: [] });
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const inputRefs = useRef<TextInput[]>([]);
   const draftsRef = useRef<Record<number, string>>({});
 
@@ -127,21 +129,12 @@ export default function EditChecklistScreen() {
   };
 
   const handleDeleteChecklist = () => {
-    Alert.alert(
-      'Delete',
-      `Delete "${checklist.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteChecklist(checklistIndex);
-            router.replace('/settings');
-          }
-        }
-      ]
-    );
+    setShowDeleteAlert(true);
+  };
+
+  const confirmDeleteChecklist = () => {
+    deleteChecklist(checklistIndex);
+    router.replace('/settings');
   };
 
   const handleBlur = (index: number) => {
@@ -333,6 +326,17 @@ export default function EditChecklistScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Delete Confirmation Alert - Apple Style */}
+      <CustomAlert
+        visible={showDeleteAlert}
+        title="Delete Checklist"
+        message={`Are you sure you want to delete "${checklist.title}"?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteChecklist}
+        onCancel={() => setShowDeleteAlert(false)}
+      />
     </View>
   );
 }
